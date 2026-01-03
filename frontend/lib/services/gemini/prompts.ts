@@ -1,270 +1,616 @@
 /**
  * Gemini LLM 프롬프트 템플릿
  * 경마 예측을 위한 시스템 프롬프트 및 예측 타입별 프롬프트
+ *
+ * 한국 경마 베팅 타입:
+ * - 단승: 1위 예측
+ * - 연승: 1~2위 안에 들 말 1마리
+ * - 복승: 1~2위 2마리 (순서 무관)
+ * - 쌍승: 1~2위 2마리 (순서 있음)
+ * - 복연승: 1~3위 안에 들 2마리 (순서 무관)
+ * - 삼복승: 1~3위 3마리 (순서 무관)
+ * - 삼쌍승: 1~3위 3마리 (순서 있음)
  */
 
 // ============================================
 // 시스템 프롬프트 (경마 전문가 페르소나)
 // ============================================
 
-export const SYSTEM_PROMPT = `당신은 30년 경력의 경마 분석 전문가입니다.
-경주 데이터를 분석하여 과학적이고 통계적으로 타당한 예측을 제공합니다.
+export const SYSTEM_PROMPT = `당신은 30년 경력의 한국 경마 분석 전문가입니다.
+경주 데이터와 배당률을 분석하여 실제 베팅에 도움이 되는 예측을 제공합니다.
 
-**분석 기준:**
-1. **말의 폼**: 최근 3-5경주 성적, 거리별 적합성, 주로 상태별 성적
-2. **기수 실력**: 기수 승률, 해당 말과의 조합 성적, 최근 폼
-3. **조교사 역량**: 조교사 승률, 해당 거리 전문성, 말 관리 능력
-4. **경주 조건**: 거리, 주로 상태, 날씨, 경주장 특성
-5. **게이트 위치**: 출발 게이트 번호의 유불리
-6. **배당률 흐름**: 대중의 선택과 실제 능력의 괴리
-7. **경쟁 강도**: 다른 출전마들의 수준 비교
+**핵심 분석 요소:**
+1. **순위 예측**: 1위, 2위, 3위를 명확히 예측
+2. **배당률 분석**: 현재 배당률 대비 기댓값 계산
+3. **기수/조교사 조합**: 승률, 최근 성적, 해당 거리 전문성
+4. **말의 컨디션**: 최근 경주 성적, 휴식 기간, 체중 변화
+5. **경주 조건**: 거리 적합성, 주로 상태, 게이트 위치
 
 **예측 원칙:**
-- 과거 데이터에 기반한 객관적 분석
-- 확률과 기댓값을 고려한 추천
-- 근거를 명확히 제시
-- 불확실성을 인정하고 리스크 설명
+- 순위를 명확히 예측 (1위, 2위, 3위)
+- 배당률 기반 기댓값 계산으로 가치 베팅 추천
+- 확률과 배당의 괴리가 큰 말 발굴 (오버/언더벳)
+- 리스크와 리턴의 균형
 
-**응답 형식:**
-반드시 유효한 JSON 형식으로 응답하세요. 추가 설명이나 마크다운 없이 순수 JSON만 출력하세요.`
+**응답 규칙:**
+반드시 유효한 JSON 형식으로만 응답. 다른 텍스트 없이 순수 JSON만 출력.`
 
 // ============================================
-// 예측 타입별 프롬프트 생성 함수
+// 예측 타입 정의
 // ============================================
+
+export type PredictionType =
+  | 'win'        // 단승: 1위
+  | 'place'      // 연승: 1~2위 중 1마리
+  | 'quinella'   // 복승: 1~2위 2마리 (무관)
+  | 'exacta'     // 쌍승: 1~2위 2마리 (순서)
+  | 'quinella_place' // 복연승: 1~3위 중 2마리 (무관)
+  | 'trio'       // 삼복승: 1~3위 3마리 (무관)
+  | 'trifecta'   // 삼쌍승: 1~3위 3마리 (순서)
 
 /**
- * 단승 예측 프롬프트
- * 1위를 예측
+ * 예측 타입별 설명
  */
+export const PREDICTION_TYPE_INFO: Record<
+  PredictionType,
+  { name: string; nameEn: string; description: string; difficulty: string; minHorses: number }
+> = {
+  win: {
+    name: '단승',
+    nameEn: 'Win',
+    description: '1위 예측',
+    difficulty: '하',
+    minHorses: 1,
+  },
+  place: {
+    name: '연승',
+    nameEn: 'Place',
+    description: '1~2위 안에 들 말 1마리',
+    difficulty: '하',
+    minHorses: 1,
+  },
+  quinella: {
+    name: '복승',
+    nameEn: 'Quinella',
+    description: '1~2위 2마리 (순서 무관)',
+    difficulty: '중',
+    minHorses: 2,
+  },
+  exacta: {
+    name: '쌍승',
+    nameEn: 'Exacta',
+    description: '1~2위 2마리 (정확한 순서)',
+    difficulty: '중상',
+    minHorses: 2,
+  },
+  quinella_place: {
+    name: '복연승',
+    nameEn: 'Quinella Place',
+    description: '1~3위 안에 들 2마리 (순서 무관)',
+    difficulty: '중',
+    minHorses: 2,
+  },
+  trio: {
+    name: '삼복승',
+    nameEn: 'Trio',
+    description: '1~3위 3마리 (순서 무관)',
+    difficulty: '상',
+    minHorses: 3,
+  },
+  trifecta: {
+    name: '삼쌍승',
+    nameEn: 'Trifecta',
+    description: '1~3위 3마리 (정확한 순서)',
+    difficulty: '최상',
+    minHorses: 3,
+  },
+}
+
+// ============================================
+// 순위 예측 공통 프롬프트 (핵심)
+// ============================================
+
+const RANKING_ANALYSIS_PROMPT = `
+**순위 예측 방법:**
+1. 먼저 모든 출전마의 예상 순위를 1위부터 꼴찌까지 매겨라
+2. 각 순위 예측의 근거를 명확히 제시
+3. 배당률과 비교하여 기댓값이 높은 베팅 추천
+
+**기댓값 계산:**
+- 기댓값 = (예상 확률 × 배당률) - 1
+- 기댓값 > 0 이면 가치 베팅
+- 예: 30% 확률로 예상하는 말의 배당이 5배 → 기댓값 = 0.3 × 5 - 1 = 0.5 (좋음)
+- 예: 30% 확률로 예상하는 말의 배당이 2배 → 기댓값 = 0.3 × 2 - 1 = -0.4 (나쁨)
+
+**배당률 해석:**
+- 낮은 배당 (1.5~3배): 인기마, 대중이 선호
+- 중간 배당 (3~10배): 중위권 평가
+- 높은 배당 (10배 이상): 비인기마, 이변 가능성
+
+**가치 베팅 발굴:**
+- 실력 대비 과소평가된 말 (배당 높음 + 실력 있음) = 가치 베팅
+- 실력 대비 과대평가된 말 (배당 낮음 + 실력 의문) = 피해야 함
+`
+
+// ============================================
+// 단승 (Win) - 1위 예측
+// ============================================
+
 export function getWinPredictionPrompt(raceContext: string): string {
   return `${SYSTEM_PROMPT}
+${RANKING_ANALYSIS_PROMPT}
 
-**과제**: 다음 경주에서 1위로 들어올 가능성이 높은 말을 예측하세요.
+**과제**: 단승 베팅 추천 - 1위로 들어올 말 예측
 
 **경주 정보:**
 ${raceContext}
 
-**요구사항:**
-1. 각 말의 1위 확률을 0~1 사이 값으로 평가
-2. 상위 5마리를 추천 (확률 높은 순)
-3. 각 말에 대한 분석 근거 제시
-4. 전체 신뢰도 점수 (0~1)
+**분석 요구사항:**
+1. 모든 출전마의 예상 순위를 매겨라 (1위~꼴찌)
+2. 1위 후보 상위 3마리의 승리 확률 계산
+3. 배당률 대비 기댓값이 가장 높은 단승 베팅 추천
+4. 본명 추천과 이변 시 대안 추천
 
 **출력 형식 (JSON):**
 {
-  "predictions": [
-    {
-      "horse_id": "말 등록번호",
-      "horse_name": "말 이름",
-      "gate_number": 게이트번호,
-      "win_probability": 0.35,
-      "confidence": 0.8,
-      "reasoning": "분석 근거 (200자 이내)",
-      "key_factors": ["폼 상승세", "기수 조합 우수", "거리 적합"]
-    }
+  "predicted_ranking": [
+    {"rank": 1, "horse_id": "등록번호", "horse_name": "이름", "gate": 번호, "win_prob": 0.35, "odds": 3.2, "expected_value": 0.12},
+    {"rank": 2, "horse_id": "등록번호", "horse_name": "이름", "gate": 번호, "win_prob": 0.25, "odds": 4.5, "expected_value": 0.125},
+    ...전체 출전마 순위
   ],
+  "recommendations": {
+    "primary": {
+      "horse_id": "등록번호",
+      "horse_name": "이름",
+      "gate": 번호,
+      "win_prob": 0.35,
+      "odds": 3.2,
+      "expected_value": 0.12,
+      "reasoning": "추천 이유 (200자)",
+      "confidence": 0.8
+    },
+    "value_bet": {
+      "horse_id": "등록번호",
+      "horse_name": "이름",
+      "gate": 번호,
+      "win_prob": 0.15,
+      "odds": 12.0,
+      "expected_value": 0.8,
+      "reasoning": "기댓값이 높은 이변마 (200자)",
+      "confidence": 0.5
+    }
+  },
+  "betting_advice": "최종 베팅 조언 (어떤 말에 얼마나)",
   "overall_confidence": 0.75,
-  "race_analysis": "경주 전체 분석 (300자 이내)",
-  "risk_factors": ["변수1", "변수2"]
+  "race_analysis": "경주 전체 분석 (300자)",
+  "risk_factors": ["리스크1", "리스크2"]
 }`
 }
 
-/**
- * 복승 예측 프롬프트
- * 1-2위 안에 들 2마리 조합
- */
+// ============================================
+// 연승 (Place) - 1~2위 안에 들 말 1마리
+// ============================================
+
 export function getPlacePredictionPrompt(raceContext: string): string {
   return `${SYSTEM_PROMPT}
+${RANKING_ANALYSIS_PROMPT}
 
-**과제**: 다음 경주에서 1-2위 안에 들어올 2마리 조합을 예측하세요.
+**과제**: 연승 베팅 추천 - 1~2위 안에 들 말 1마리 예측
 
 **경주 정보:**
 ${raceContext}
 
-**요구사항:**
-1. 1-2위 안에 들 확률이 높은 2마리 조합 추천
-2. 상위 5개 조합 제시
-3. 각 조합의 성공 확률과 기댓값 계산
-4. 배당률 대비 가치 평가
+**분석 요구사항:**
+1. 모든 출전마의 예상 순위 매기기
+2. 1~2위권 진입 확률 계산 (연승 확률)
+3. 연승 배당 대비 기댓값 계산
+4. 안정적인 연승 베팅 추천
+
+**연승 특징:**
+- 1위 또는 2위면 적중
+- 배당은 단승보다 낮지만 적중률 높음
+- 안정적인 베팅에 적합
 
 **출력 형식 (JSON):**
 {
-  "predictions": [
-    {
-      "combination": [
-        {
-          "horse_id": "말1 등록번호",
-          "horse_name": "말1 이름",
-          "gate_number": 게이트번호
-        },
-        {
-          "horse_id": "말2 등록번호",
-          "horse_name": "말2 이름",
-          "gate_number": 게이트번호
-        }
-      ],
-      "success_probability": 0.42,
-      "expected_return": 2.8,
-      "confidence": 0.75,
-      "reasoning": "조합 분석 (200자 이내)",
-      "synergy": "두 말의 시너지 설명"
-    }
+  "predicted_ranking": [
+    {"rank": 1, "horse_id": "등록번호", "horse_name": "이름", "gate": 번호, "place_prob": 0.65, "place_odds": 1.8, "expected_value": 0.17},
+    {"rank": 2, "horse_id": "등록번호", "horse_name": "이름", "gate": 번호, "place_prob": 0.55, "place_odds": 2.1, "expected_value": 0.155},
+    ...
   ],
-  "overall_confidence": 0.7,
-  "betting_strategy": "베팅 전략 제안"
+  "recommendations": {
+    "safest": {
+      "horse_id": "등록번호",
+      "horse_name": "이름",
+      "gate": 번호,
+      "place_prob": 0.65,
+      "place_odds": 1.8,
+      "expected_value": 0.17,
+      "reasoning": "가장 안정적인 연승 후보 (200자)",
+      "confidence": 0.85
+    },
+    "value_bet": {
+      "horse_id": "등록번호",
+      "horse_name": "이름",
+      "gate": 번호,
+      "place_prob": 0.40,
+      "place_odds": 3.5,
+      "expected_value": 0.4,
+      "reasoning": "기댓값 높은 연승 후보 (200자)",
+      "confidence": 0.6
+    }
+  },
+  "betting_advice": "연승 베팅 전략",
+  "overall_confidence": 0.8,
+  "race_analysis": "경주 분석"
 }`
 }
 
-/**
- * 연승 예측 프롬프트
- * 정확한 1-2위 순서 예측
- */
+// ============================================
+// 복승 (Quinella) - 1~2위 2마리 (순서 무관)
+// ============================================
+
 export function getQuinellaPredictionPrompt(raceContext: string): string {
   return `${SYSTEM_PROMPT}
+${RANKING_ANALYSIS_PROMPT}
 
-**과제**: 다음 경주에서 1위와 2위를 정확한 순서로 예측하세요.
+**과제**: 복승 베팅 추천 - 1~2위에 들어올 2마리 예측 (순서 무관)
 
 **경주 정보:**
 ${raceContext}
 
-**요구사항:**
-1. 1위-2위 정확한 순서 조합 예측
-2. 상위 5개 조합 제시
-3. 순서가 중요하므로 마지막 직선주로 상황 고려
-4. 배당률 대비 가치가 높은 조합 우선
+**분석 요구사항:**
+1. 모든 출전마의 예상 순위 매기기
+2. 1~2위 진입 확률 높은 상위 4마리 선정
+3. 가능한 2마리 조합의 성공 확률과 기댓값 계산
+4. 최적의 복승 조합 추천
 
 **출력 형식 (JSON):**
 {
-  "predictions": [
-    {
-      "first_place": {
-        "horse_id": "1위 말 등록번호",
-        "horse_name": "1위 말 이름",
-        "gate_number": 게이트번호,
-        "winning_factors": ["요인1", "요인2"]
-      },
-      "second_place": {
-        "horse_id": "2위 말 등록번호",
-        "horse_name": "2위 말 이름",
-        "gate_number": 게이트번호,
-        "factors": ["요인1", "요인2"]
-      },
-      "probability": 0.18,
-      "expected_return": 5.2,
-      "confidence": 0.65,
-      "reasoning": "순서 예측 근거 (200자 이내)"
-    }
+  "predicted_ranking": [
+    {"rank": 1, "horse_id": "등록번호", "horse_name": "이름", "gate": 번호},
+    {"rank": 2, "horse_id": "등록번호", "horse_name": "이름", "gate": 번호},
+    ...
   ],
-  "overall_confidence": 0.6,
-  "race_scenario": "예상 경주 전개"
-}`
-}
-
-/**
- * 복연승 예측 프롬프트
- * 1-2-3위 안에 들 3마리 조합 (순서 무관)
- */
-export function getTrifectaPredictionPrompt(raceContext: string): string {
-  return `${SYSTEM_PROMPT}
-
-**과제**: 다음 경주에서 1-2-3위 안에 들어올 3마리를 예측하세요 (순서 무관).
-
-**경주 정보:**
-${raceContext}
-
-**요구사항:**
-1. 상위권(1-3위)에 들 확률이 높은 3마리 조합
-2. 상위 5개 조합 제시
-3. 안정성과 배당의 균형 고려
-4. 다크호스 포함 여부 결정
-
-**출력 형식 (JSON):**
-{
-  "predictions": [
+  "top_contenders": [
+    {"horse_id": "등록번호", "horse_name": "이름", "gate": 번호, "top2_prob": 0.6},
+    {"horse_id": "등록번호", "horse_name": "이름", "gate": 번호, "top2_prob": 0.5},
+    {"horse_id": "등록번호", "horse_name": "이름", "gate": 번호, "top2_prob": 0.35},
+    {"horse_id": "등록번호", "horse_name": "이름", "gate": 번호, "top2_prob": 0.25}
+  ],
+  "combinations": [
     {
-      "combination": [
-        {
-          "horse_id": "말1 등록번호",
-          "horse_name": "말1 이름",
-          "gate_number": 게이트번호,
-          "expected_position": "1-2위권"
-        },
-        {
-          "horse_id": "말2 등록번호",
-          "horse_name": "말2 이름",
-          "gate_number": 게이트번호,
-          "expected_position": "2-3위권"
-        },
-        {
-          "horse_id": "말3 등록번호",
-          "horse_name": "말3 이름",
-          "gate_number": 게이트번호,
-          "expected_position": "다크호스"
-        }
+      "horses": [
+        {"horse_id": "등록번호", "horse_name": "이름", "gate": 번호},
+        {"horse_id": "등록번호", "horse_name": "이름", "gate": 번호}
       ],
-      "success_probability": 0.35,
-      "expected_return": 4.5,
-      "confidence": 0.7,
-      "reasoning": "3마리 조합 분석 (250자 이내)",
-      "risk_assessment": "리스크 평가"
+      "success_prob": 0.30,
+      "quinella_odds": 8.5,
+      "expected_value": 1.55,
+      "reasoning": "조합 분석",
+      "confidence": 0.7
     }
   ],
-  "overall_confidence": 0.68,
-  "recommended_stakes": "추천 베팅 비중"
+  "recommendations": {
+    "primary": {
+      "display": "3-5 복승",
+      "horses": [{"gate": 3, "horse_name": "이름"}, {"gate": 5, "horse_name": "이름"}],
+      "success_prob": 0.30,
+      "odds": 8.5,
+      "expected_value": 1.55,
+      "reasoning": "본명 복승 추천 이유"
+    },
+    "value_bet": {
+      "display": "3-7 복승",
+      "horses": [{"gate": 3, "horse_name": "이름"}, {"gate": 7, "horse_name": "이름"}],
+      "success_prob": 0.15,
+      "odds": 25.0,
+      "expected_value": 2.75,
+      "reasoning": "고배당 가치 베팅"
+    }
+  },
+  "betting_advice": "복승 베팅 전략",
+  "overall_confidence": 0.7
 }`
 }
 
-/**
- * 삼복승 예측 프롬프트
- * 정확한 1-2-3위 순서 예측
- */
+// ============================================
+// 쌍승 (Exacta) - 1~2위 2마리 (순서 있음)
+// ============================================
+
 export function getExactaPredictionPrompt(raceContext: string): string {
   return `${SYSTEM_PROMPT}
+${RANKING_ANALYSIS_PROMPT}
 
-**과제**: 다음 경주에서 1위, 2위, 3위를 정확한 순서로 예측하세요.
+**과제**: 쌍승 베팅 추천 - 1위와 2위를 정확한 순서로 예측
 
 **경주 정보:**
 ${raceContext}
 
-**요구사항:**
-1. 1-2-3위 정확한 순서 예측 (난이도 최고)
-2. 상위 3개 조합만 제시 (확률이 매우 낮으므로)
-3. 경주 전개 시나리오 상세 분석
-4. 고배당 가능성과 리스크 명확히 제시
+**분석 요구사항:**
+1. 1위 후보 상위 3마리 선정
+2. 2위 후보 상위 4마리 선정
+3. 1위-2위 순서 조합의 성공 확률과 기댓값 계산
+4. 경주 전개 시나리오 기반 순서 예측
+
+**쌍승 특징:**
+- 순서가 정확해야 적중 (복승보다 어려움)
+- 배당이 복승의 약 2배
+- 경주 전개 예측이 중요
 
 **출력 형식 (JSON):**
 {
-  "predictions": [
+  "predicted_ranking": [
+    {"rank": 1, "horse_id": "등록번호", "horse_name": "이름", "gate": 번호, "win_prob": 0.35},
+    {"rank": 2, "horse_id": "등록번호", "horse_name": "이름", "gate": 번호, "win_prob": 0.25},
+    ...
+  ],
+  "combinations": [
     {
-      "first_place": {
-        "horse_id": "1위 말 등록번호",
-        "horse_name": "1위 말 이름",
-        "gate_number": 게이트번호,
-        "dominance_factors": ["압도적 요인들"]
-      },
-      "second_place": {
-        "horse_id": "2위 말 등록번호",
-        "horse_name": "2위 말 이름",
-        "gate_number": 게이트번호,
-        "positioning_factors": ["2위 예상 근거"]
-      },
-      "third_place": {
-        "horse_id": "3위 말 등록번호",
-        "horse_name": "3위 말 이름",
-        "gate_number": 게이트번호,
-        "factors": ["3위 예상 근거"]
-      },
-      "probability": 0.08,
-      "expected_return": 12.5,
-      "confidence": 0.5,
-      "reasoning": "전체 순서 예측 근거 (300자 이내)",
-      "race_narrative": "예상 경주 스토리"
+      "first": {"horse_id": "등록번호", "horse_name": "이름", "gate": 번호},
+      "second": {"horse_id": "등록번호", "horse_name": "이름", "gate": 번호},
+      "success_prob": 0.12,
+      "exacta_odds": 18.0,
+      "expected_value": 1.16,
+      "reasoning": "이 순서로 예상하는 이유",
+      "race_scenario": "예상 경주 전개"
     }
   ],
-  "overall_confidence": 0.45,
-  "high_risk_warning": "높은 리스크 경고 메시지",
-  "alternative_strategy": "대안 베팅 전략"
+  "recommendations": {
+    "primary": {
+      "display": "5→3 쌍승",
+      "first": {"gate": 5, "horse_name": "1위 예상마"},
+      "second": {"gate": 3, "horse_name": "2위 예상마"},
+      "success_prob": 0.12,
+      "odds": 18.0,
+      "expected_value": 1.16,
+      "reasoning": "본명 쌍승 추천"
+    },
+    "reverse": {
+      "display": "3→5 쌍승",
+      "first": {"gate": 3, "horse_name": "이름"},
+      "second": {"gate": 5, "horse_name": "이름"},
+      "success_prob": 0.10,
+      "odds": 22.0,
+      "expected_value": 1.2,
+      "reasoning": "역전 시나리오"
+    }
+  },
+  "betting_advice": "쌍승 베팅 전략 (마방 추천: 본명+역순)",
+  "overall_confidence": 0.65
 }`
+}
+
+// ============================================
+// 복연승 (Quinella Place) - 1~3위 중 2마리 (순서 무관)
+// ============================================
+
+export function getQuinellaPlacePredictionPrompt(raceContext: string): string {
+  return `${SYSTEM_PROMPT}
+${RANKING_ANALYSIS_PROMPT}
+
+**과제**: 복연승 베팅 추천 - 1~3위 안에 들 2마리 예측 (순서 무관)
+
+**경주 정보:**
+${raceContext}
+
+**분석 요구사항:**
+1. 모든 출전마의 예상 순위 매기기
+2. 1~3위권 진입 확률 계산
+3. 2마리 조합의 복연승 성공 확률과 기댓값 계산
+4. 안정적인 조합과 고배당 조합 추천
+
+**복연승 특징:**
+- 2마리 모두 1~3위 안에 들면 적중
+- 복승보다 쉬움 (3위까지 인정)
+- 배당은 복승보다 낮음
+- 안정적인 조합 베팅에 적합
+
+**출력 형식 (JSON):**
+{
+  "predicted_ranking": [
+    {"rank": 1, "horse_id": "등록번호", "horse_name": "이름", "gate": 번호, "top3_prob": 0.85},
+    {"rank": 2, "horse_id": "등록번호", "horse_name": "이름", "gate": 번호, "top3_prob": 0.75},
+    {"rank": 3, "horse_id": "등록번호", "horse_name": "이름", "gate": 번호, "top3_prob": 0.60},
+    ...
+  ],
+  "combinations": [
+    {
+      "horses": [
+        {"horse_id": "등록번호", "horse_name": "이름", "gate": 번호},
+        {"horse_id": "등록번호", "horse_name": "이름", "gate": 번호}
+      ],
+      "success_prob": 0.55,
+      "qp_odds": 2.5,
+      "expected_value": 0.375,
+      "reasoning": "조합 분석"
+    }
+  ],
+  "recommendations": {
+    "safest": {
+      "display": "1-3 복연승",
+      "horses": [{"gate": 1, "horse_name": "이름"}, {"gate": 3, "horse_name": "이름"}],
+      "success_prob": 0.55,
+      "odds": 2.5,
+      "expected_value": 0.375,
+      "reasoning": "가장 안정적인 조합"
+    },
+    "value_bet": {
+      "display": "1-6 복연승",
+      "horses": [{"gate": 1, "horse_name": "이름"}, {"gate": 6, "horse_name": "이름"}],
+      "success_prob": 0.30,
+      "odds": 6.0,
+      "expected_value": 0.8,
+      "reasoning": "기댓값 높은 조합"
+    }
+  },
+  "betting_advice": "복연승 베팅 전략",
+  "overall_confidence": 0.75
+}`
+}
+
+// ============================================
+// 삼복승 (Trio) - 1~3위 3마리 (순서 무관)
+// ============================================
+
+export function getTrioPredictionPrompt(raceContext: string): string {
+  return `${SYSTEM_PROMPT}
+${RANKING_ANALYSIS_PROMPT}
+
+**과제**: 삼복승 베팅 추천 - 1~3위에 들어올 3마리 예측 (순서 무관)
+
+**경주 정보:**
+${raceContext}
+
+**분석 요구사항:**
+1. 모든 출전마의 예상 순위 매기기
+2. 1~3위권 진입 확률 높은 상위 5마리 선정
+3. 3마리 조합의 성공 확률과 기댓값 계산
+4. 안정 조합 + 다크호스 포함 조합 추천
+
+**출력 형식 (JSON):**
+{
+  "predicted_ranking": [
+    {"rank": 1, "horse_id": "등록번호", "horse_name": "이름", "gate": 번호},
+    {"rank": 2, "horse_id": "등록번호", "horse_name": "이름", "gate": 번호},
+    {"rank": 3, "horse_id": "등록번호", "horse_name": "이름", "gate": 번호},
+    ...
+  ],
+  "top_contenders": [
+    {"horse_id": "등록번호", "horse_name": "이름", "gate": 번호, "top3_prob": 0.80, "role": "본명"},
+    {"horse_id": "등록번호", "horse_name": "이름", "gate": 번호, "top3_prob": 0.65, "role": "본명"},
+    {"horse_id": "등록번호", "horse_name": "이름", "gate": 번호, "top3_prob": 0.55, "role": "준본명"},
+    {"horse_id": "등록번호", "horse_name": "이름", "gate": 번호, "top3_prob": 0.30, "role": "다크호스"},
+    {"horse_id": "등록번호", "horse_name": "이름", "gate": 번호, "top3_prob": 0.20, "role": "이변마"}
+  ],
+  "combinations": [
+    {
+      "horses": [
+        {"horse_id": "등록번호", "horse_name": "이름", "gate": 번호},
+        {"horse_id": "등록번호", "horse_name": "이름", "gate": 번호},
+        {"horse_id": "등록번호", "horse_name": "이름", "gate": 번호}
+      ],
+      "success_prob": 0.28,
+      "trio_odds": 12.0,
+      "expected_value": 2.36,
+      "reasoning": "조합 분석"
+    }
+  ],
+  "recommendations": {
+    "primary": {
+      "display": "1-3-5 삼복승",
+      "horses": [{"gate": 1}, {"gate": 3}, {"gate": 5}],
+      "success_prob": 0.28,
+      "odds": 12.0,
+      "expected_value": 2.36,
+      "reasoning": "본명 조합"
+    },
+    "with_dark_horse": {
+      "display": "1-3-7 삼복승",
+      "horses": [{"gate": 1}, {"gate": 3}, {"gate": 7}],
+      "success_prob": 0.12,
+      "odds": 45.0,
+      "expected_value": 4.4,
+      "reasoning": "다크호스 포함 고배당"
+    }
+  },
+  "betting_advice": "삼복승 베팅 전략",
+  "overall_confidence": 0.65
+}`
+}
+
+// ============================================
+// 삼쌍승 (Trifecta) - 1~3위 3마리 (순서 있음)
+// ============================================
+
+export function getTrifectaPredictionPrompt(raceContext: string): string {
+  return `${SYSTEM_PROMPT}
+${RANKING_ANALYSIS_PROMPT}
+
+**과제**: 삼쌍승 베팅 추천 - 1위, 2위, 3위를 정확한 순서로 예측
+
+**경주 정보:**
+${raceContext}
+
+**분석 요구사항:**
+1. 1위, 2위, 3위를 정확히 예측
+2. 상위 3개 순서 조합의 성공 확률과 기댓값 계산
+3. 경주 전개 시나리오 상세 분석
+4. 고위험 고수익 베팅임을 감안한 조언
+
+**삼쌍승 특징:**
+- 1-2-3위 순서가 정확해야 적중
+- 가장 어려운 베팅, 가장 높은 배당
+- 마방(박스) 베팅으로 리스크 분산 가능
+
+**출력 형식 (JSON):**
+{
+  "predicted_ranking": [
+    {"rank": 1, "horse_id": "등록번호", "horse_name": "이름", "gate": 번호, "win_prob": 0.35},
+    {"rank": 2, "horse_id": "등록번호", "horse_name": "이름", "gate": 번호, "second_prob": 0.30},
+    {"rank": 3, "horse_id": "등록번호", "horse_name": "이름", "gate": 번호, "third_prob": 0.25},
+    ...
+  ],
+  "combinations": [
+    {
+      "first": {"horse_id": "등록번호", "horse_name": "이름", "gate": 번호},
+      "second": {"horse_id": "등록번호", "horse_name": "이름", "gate": 번호},
+      "third": {"horse_id": "등록번호", "horse_name": "이름", "gate": 번호},
+      "success_prob": 0.05,
+      "trifecta_odds": 85.0,
+      "expected_value": 3.25,
+      "reasoning": "순서 예측 근거",
+      "race_scenario": "예상 경주 전개 스토리"
+    }
+  ],
+  "recommendations": {
+    "primary": {
+      "display": "5→3→1 삼쌍승",
+      "first": {"gate": 5, "horse_name": "이름"},
+      "second": {"gate": 3, "horse_name": "이름"},
+      "third": {"gate": 1, "horse_name": "이름"},
+      "success_prob": 0.05,
+      "odds": 85.0,
+      "expected_value": 3.25,
+      "reasoning": "본명 삼쌍승"
+    },
+    "box_suggestion": {
+      "display": "1,3,5 마방 (6점)",
+      "horses": [{"gate": 1}, {"gate": 3}, {"gate": 5}],
+      "total_combinations": 6,
+      "any_hit_prob": 0.28,
+      "reasoning": "마방으로 리스크 분산"
+    }
+  },
+  "betting_advice": "삼쌍승 베팅 전략 (고위험)",
+  "overall_confidence": 0.50,
+  "high_risk_warning": "삼쌍승은 적중률이 매우 낮습니다. 소액 베팅 권장."
+}`
+}
+
+// ============================================
+// 프롬프트 라우터
+// ============================================
+
+export function getPredictionPrompt(type: PredictionType, raceContext: string): string {
+  switch (type) {
+    case 'win':
+      return getWinPredictionPrompt(raceContext)
+    case 'place':
+      return getPlacePredictionPrompt(raceContext)
+    case 'quinella':
+      return getQuinellaPredictionPrompt(raceContext)
+    case 'exacta':
+      return getExactaPredictionPrompt(raceContext)
+    case 'quinella_place':
+      return getQuinellaPlacePredictionPrompt(raceContext)
+    case 'trio':
+      return getTrioPredictionPrompt(raceContext)
+    case 'trifecta':
+      return getTrifectaPredictionPrompt(raceContext)
+    default:
+      throw new Error(`알 수 없는 예측 타입: ${type}`)
+  }
 }
 
 // ============================================
@@ -280,6 +626,7 @@ ${fullContext}
 - 경주 기본 정보 (거리, 주로, 날씨)
 - 각 말의 핵심 통계 (최근 성적, 승률)
 - 기수/조교사 주요 지표
+- 현재 배당률
 - 특이사항
 
 JSON 형식으로 구조화된 요약 제공.`
@@ -301,10 +648,11 @@ ${JSON.stringify(prediction, null, 2)}
 ${raceContext}
 
 **검증 사항:**
-1. 예측의 논리적 일관성
-2. 통계적 타당성
-3. 누락된 중요 요인
-4. 과신 또는 과소평가 여부
+1. 순위 예측의 논리적 일관성
+2. 확률 계산의 타당성
+3. 기댓값 계산 정확성
+4. 누락된 중요 요인
+5. 과신 또는 과소평가 여부
 
 **출력 형식 (JSON):**
 {
@@ -312,63 +660,7 @@ ${raceContext}
   "confidence_adjustment": -0.1 ~ +0.1,
   "issues_found": ["문제점1", "문제점2"],
   "improvements": ["개선사항1", "개선사항2"],
+  "revised_ranking": [순위 수정이 필요하면 새 순위],
   "revised_reasoning": "수정된 분석"
 }`
-}
-
-// ============================================
-// 프롬프트 헬퍼 함수
-// ============================================
-
-export type PredictionType = 'win' | 'place' | 'quinella' | 'trifecta' | 'exacta'
-
-export function getPredictionPrompt(type: PredictionType, raceContext: string): string {
-  switch (type) {
-    case 'win':
-      return getWinPredictionPrompt(raceContext)
-    case 'place':
-      return getPlacePredictionPrompt(raceContext)
-    case 'quinella':
-      return getQuinellaPredictionPrompt(raceContext)
-    case 'trifecta':
-      return getTrifectaPredictionPrompt(raceContext)
-    case 'exacta':
-      return getExactaPredictionPrompt(raceContext)
-    default:
-      throw new Error(`알 수 없는 예측 타입: ${type}`)
-  }
-}
-
-/**
- * 예측 타입별 설명
- */
-export const PREDICTION_TYPE_INFO: Record<
-  PredictionType,
-  { name: string; description: string; difficulty: string }
-> = {
-  win: {
-    name: '단승',
-    description: '1위 예측',
-    difficulty: '하',
-  },
-  place: {
-    name: '복승',
-    description: '1-2위 안에 들 2마리 (순서 무관)',
-    difficulty: '하',
-  },
-  quinella: {
-    name: '연승',
-    description: '1위-2위 순서 예측',
-    difficulty: '중',
-  },
-  trifecta: {
-    name: '복연승 (삼복승)',
-    description: '1-2-3위 안에 들 3마리 (순서 무관)',
-    difficulty: '중상',
-  },
-  exacta: {
-    name: '삼복승 (삼쌍승)',
-    description: '1-2-3위 정확한 순서 예측',
-    difficulty: '상',
-  },
 }

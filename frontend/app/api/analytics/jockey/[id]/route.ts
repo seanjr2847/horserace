@@ -5,7 +5,6 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { getRedisCache } from '@/lib/services/cache/redis'
 
 export async function GET(
   request: NextRequest,
@@ -19,15 +18,6 @@ export async function GET(
         { success: false, message: '유효하지 않은 기수 ID' },
         { status: 400 }
       )
-    }
-
-    // 캐시 확인
-    const cacheKey = `analytics:jockey:${jockeyId}`
-    const cache = getRedisCache()
-    const cached = await cache.get(cacheKey)
-
-    if (cached) {
-      return NextResponse.json(cached)
     }
 
     // 기수 기본 정보 조회
@@ -229,9 +219,6 @@ export async function GET(
       bestHorseCombination,
       totalRaceHistory: allRaces.length,
     }
-
-    // 캐시 저장 (30분)
-    await cache.set(cacheKey, result, 1800)
 
     return NextResponse.json(result)
   } catch (error) {

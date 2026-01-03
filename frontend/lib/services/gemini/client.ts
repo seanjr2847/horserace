@@ -9,9 +9,9 @@ import { GoogleGenerativeAI, GenerativeModel, GenerationConfig } from '@google/g
 // 설정 상수
 // ============================================
 
-const GEMINI_MODEL = 'gemini-2.0-flash-exp' // 빠르고 저렴한 모델
+const GEMINI_MODEL = 'gemini-3-flash-preview' // 빠르고 저렴한 모델
 const DEFAULT_TEMPERATURE = 0.7 // 창의성과 일관성 균형
-const DEFAULT_MAX_TOKENS = 2048 // 응답 최대 토큰
+const DEFAULT_MAX_TOKENS = 30000 // 응답 최대 토큰
 const DEFAULT_TIMEOUT = 30000 // 30초
 
 // ============================================
@@ -73,8 +73,8 @@ export class GeminiClient {
       )
     }
 
-    // GoogleGenerativeAI 인스턴스 생성
-    this.genAI = new GoogleGenerativeAI(this.apiKey)
+    // GoogleGenerativeAI 인스턴스 생성 (v1beta API 사용)
+    this.genAI = new GoogleGenerativeAI(this.apiKey, { apiVersion: 'v1beta' })
 
     // 모델 생성
     this.model = this.genAI.getGenerativeModel({
@@ -117,9 +117,9 @@ export class GeminiClient {
         finishReason: response.candidates?.[0]?.finishReason || 'STOP',
         safetyRatings: response.candidates?.[0]?.safetyRatings,
         tokenCount: {
-          promptTokens: result.response.usageMetadata?.promptTokenCount || 0,
-          responseTokens: result.response.usageMetadata?.candidatesTokenCount || 0,
-          totalTokens: result.response.usageMetadata?.totalTokenCount || 0,
+          promptTokens: (result.response as any).usageMetadata?.promptTokenCount || 0,
+          responseTokens: (result.response as any).usageMetadata?.candidatesTokenCount || 0,
+          totalTokens: (result.response as any).usageMetadata?.totalTokenCount || 0,
         },
       }
     } catch (error: any) {
@@ -169,12 +169,37 @@ export class GeminiClient {
       // JSON 추출 (마크다운 코드 블록 제거)
       let jsonText = response.text.trim()
 
-      // ```json ... ``` 형식 제거
+      console.log('📝 Raw LLM response length:', jsonText.length)
+      console.log('📝 Raw LLM response (first 500):', jsonText.substring(0, 500))
+      console.log('📝 Raw LLM response (last 200):', jsonText.substring(jsonText.length - 200))
+
+      // ```json ... ``` 형식 제거 (닫는 ``` 없어도 처리)
       if (jsonText.startsWith('```json')) {
-        jsonText = jsonText.replace(/^```json\s*/, '').replace(/\s*```$/, '')
+        jsonText = jsonText.replace(/^```json\s*/, '').replace(/\s*```\s*$/, '')
       } else if (jsonText.startsWith('```')) {
-        jsonText = jsonText.replace(/^```\s*/, '').replace(/\s*```$/, '')
+        jsonText = jsonText.replace(/^```\s*/, '').replace(/\s*```\s*$/, '')
       }
+
+      // JSON 객체/배열 추출 (시작 { 또는 [ 부터 마지막 } 또는 ] 까지)
+      const jsonMatch = jsonText.match(/[\[{][\s\S]*[\]}]/)
+      if (jsonMatch) {
+        jsonText = jsonMatch[0]
+      }
+
+      // LLM이 자주 하는 JSON 실수 정리
+      jsonText = jsonText
+        // 싱글쿼트 → 더블쿼트 (속성명과 문자열 값)
+        .replace(/(\s*)'([^']+)'(\s*:)/g, '$1"$2"$3')  // 키: 'key': → "key":
+        .replace(/:\s*'([^']*)'/g, ': "$1"')           // 값: : 'value' → : "value"
+        // trailing comma 제거 (마지막 , 뒤에 } 또는 ])
+        .replace(/,(\s*[}\]])/g, '$1')
+        // 주석 제거
+        .replace(/\/\/[^\n]*/g, '')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        // 줄바꿈 문자열 내 이스케이프
+        .replace(/:\s*"([^"]*)\n([^"]*)"/g, ': "$1\\n$2"')
+
+      console.log('📝 Cleaned JSON (first 300):', jsonText.substring(0, 300))
 
       // JSON 파싱
       const parsed = JSON.parse(jsonText)

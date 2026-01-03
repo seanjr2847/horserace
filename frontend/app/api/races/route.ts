@@ -5,7 +5,6 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { getRedisCache } from '@/lib/services/cache/redis'
 
 export async function GET(request: NextRequest) {
   try {
@@ -15,16 +14,6 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status')
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '20')
-
-    // 캐시 키 생성
-    const cacheKey = `races:list:${date || 'all'}:${trackId || 'all'}:${status || 'all'}:${page}:${limit}`
-    const cache = getRedisCache()
-
-    // 캐시 확인
-    const cached = await cache.get(cacheKey)
-    if (cached) {
-      return NextResponse.json(cached)
-    }
 
     // 필터 조건 구성
     const where: any = {}
@@ -104,9 +93,6 @@ export async function GET(request: NextRequest) {
         hasPrev: page > 1,
       },
     }
-
-    // 캐시 저장 (10분)
-    await cache.set(cacheKey, result, 600)
 
     return NextResponse.json(result)
   } catch (error) {

@@ -17,8 +17,17 @@ export interface PaginatedResponse<T> {
 }
 
 export interface RaceListResponse {
+  success: boolean
   races: Race[]
-  total: number
+  message?: string
+  pagination: {
+    page: number
+    limit: number
+    total: number
+    totalPages: number
+    hasNext: boolean
+    hasPrev: boolean
+  }
 }
 
 export interface RaceDetailResponse {

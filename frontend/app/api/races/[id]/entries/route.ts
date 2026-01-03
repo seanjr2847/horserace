@@ -5,7 +5,6 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { getRedisCache } from '@/lib/services/cache/redis'
 
 export async function GET(
   request: NextRequest,
@@ -19,15 +18,6 @@ export async function GET(
         { success: false, message: '유효하지 않은 경주 ID' },
         { status: 400 }
       )
-    }
-
-    // 캐시 확인
-    const cacheKey = `race:entries:${raceId}`
-    const cache = getRedisCache()
-    const cached = await cache.get(cacheKey)
-
-    if (cached) {
-      return NextResponse.json(cached)
     }
 
     // 출전 정보 조회
@@ -104,9 +94,6 @@ export async function GET(
         finishTime: entry.finishTime?.toString(),
       })),
     }
-
-    // 캐시 저장 (10분)
-    await cache.set(cacheKey, result, 600)
 
     return NextResponse.json(result)
   } catch (error) {

@@ -32,21 +32,21 @@ export interface TrainerStats {
 export const analyticsApi = {
   getHorseStats: async (horseId: number): Promise<HorseStats> => {
     const response = await apiClient.get<HorseStats>(
-      `/v1/analytics/horse/${horseId}/stats`
+      `/analytics/horse/${horseId}`
     )
     return response.data
   },
 
   getJockeyStats: async (jockeyId: number): Promise<JockeyStats> => {
     const response = await apiClient.get<JockeyStats>(
-      `/v1/analytics/jockey/${jockeyId}/stats`
+      `/analytics/jockey/${jockeyId}`
     )
     return response.data
   },
 
   getTrainerStats: async (trainerId: number): Promise<TrainerStats> => {
     const response = await apiClient.get<TrainerStats>(
-      `/v1/analytics/trainer/${trainerId}/stats`
+      `/analytics/trainer/${trainerId}`
     )
     return response.data
   },

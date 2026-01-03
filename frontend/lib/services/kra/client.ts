@@ -237,16 +237,18 @@ export class KRAApiClient {
   /**
    * 특정 경주의 출전마 목록 조회
    * API: 출전표정보 (15058677)
+   * 참고: rc_no는 응답 필드이므로 요청 파라미터로 사용 불가, 응답에서 필터링
    */
   async getHorseEntries(rcDate: string, rcNo: number, meet: string): Promise<KRAHorseEntry[]> {
     const response = await this.request<KRAHorseEntry>(ENDPOINTS.ENTRY_SHEET, {
       rc_date: rcDate,
-      rc_no: rcNo,
       meet,
-      numOfRows: 100,
+      numOfRows: 1000,
     })
 
-    return response.response.body.items?.item || []
+    const items = response.response.body.items?.item || []
+    // rcNo로 필터링 (rc_no는 요청 파라미터가 아닌 응답 필드)
+    return items.filter((item) => item.rcNo === rcNo)
   }
 
   /**
@@ -533,6 +535,16 @@ export class KRAApiClient {
    * KRA API 날짜 파싱 (YYYYMMDD → Date)
    */
   private parseKRADate(dateStr: string): Date {
+    const year = parseInt(dateStr.substring(0, 4))
+    const month = parseInt(dateStr.substring(4, 6)) - 1
+    const day = parseInt(dateStr.substring(6, 8))
+    return new Date(year, month, day)
+  }
+
+  /**
+   * KRA API 날짜 파싱 (YYYYMMDD → Date) - static 버전
+   */
+  static parseDate(dateStr: string): Date {
     const year = parseInt(dateStr.substring(0, 4))
     const month = parseInt(dateStr.substring(4, 6)) - 1
     const day = parseInt(dateStr.substring(6, 8))

@@ -5,7 +5,7 @@
 
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { racesApi } from '@/lib/api/races'
 import RaceCard from '@/components/RaceCard'
@@ -13,7 +13,7 @@ import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorAlert from '@/components/ErrorAlert'
 import type { Race } from '@/types/race'
 
-export default function RacesPage() {
+function RacesContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -95,7 +95,7 @@ export default function RacesPage() {
   if (loading) {
     return (
       <div className="container mx-auto px-4 py-8">
-        <LoadingSpinner message="경주 목록을 불러오는 중..." />
+        <LoadingSpinner text="경주 목록을 불러오는 중..." />
       </div>
     )
   }
@@ -103,7 +103,7 @@ export default function RacesPage() {
   if (error) {
     return (
       <div className="container mx-auto px-4 py-8">
-        <ErrorAlert message={error} onRetry={loadRaces} />
+        <ErrorAlert message={error} />
       </div>
     )
   }
@@ -246,5 +246,13 @@ export default function RacesPage() {
         </>
       )}
     </div>
+  )
+}
+
+export default function RacesPage() {
+  return (
+    <Suspense fallback={<div className="container mx-auto px-4 py-8"><LoadingSpinner text="로딩 중..." /></div>}>
+      <RacesContent />
+    </Suspense>
   )
 }

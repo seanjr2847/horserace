@@ -2,27 +2,30 @@ export interface RaceTrack {
   id: number
   name: string
   code: number
-  location: string
-  created_at: string
-  updated_at: string
+  location?: string
+  createdAt?: string
+  updatedAt?: string
 }
 
 export interface Race {
   id: number
-  race_date: string
-  race_number: number
-  track_id: number
+  raceDate: string
+  raceNumber: number
+  trackId?: number
   track?: RaceTrack
   distance: number
-  surface_type: string
+  surfaceType: string
   weather?: string
-  track_condition?: string
-  race_class?: string
-  prize_money?: number
-  race_status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled'
+  trackCondition?: string
+  raceClass?: string
+  prizeMoney?: number | string
+  raceStatus: 'scheduled' | 'in_progress' | 'completed' | 'cancelled'
   entries?: RaceEntry[]
-  created_at: string
-  updated_at: string
+  entryCount?: number
+  hasPredictions?: boolean
+  predictionTypes?: string[]
+  createdAt?: string
+  updatedAt?: string
 }
 
 export interface RaceEntry {

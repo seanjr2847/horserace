@@ -83,6 +83,14 @@ function parseGender(koreanGender: string): HorseGender {
   return 'stallion'
 }
 
+function parseRating(rating: string | number | null | undefined): number | null {
+  if (rating === null || rating === undefined || rating === '' || rating === '-') {
+    return null
+  }
+  const parsed = typeof rating === 'number' ? rating : parseInt(rating, 10)
+  return isNaN(parsed) ? null : parsed
+}
+
 function parseSurfaceType(trackStat: string): string {
   if (trackStat && trackStat.includes('잔디')) {
     return '잔디'
@@ -106,7 +114,7 @@ function normalizeTrackCondition(trackStat: string): string {
 // ============================================
 
 export async function syncRace(raceInfo: KRARaceInfo): Promise<number> {
-  const raceDate = KRAApiClient.parseDate(raceInfo.rcDate)
+  const raceDate = KRAApiClient.parseDate(String(raceInfo.rcDate))
   const trackId = TRACK_CODE_MAP[raceInfo.meet] || 1
 
   // Upsert 경주 정보
@@ -159,7 +167,7 @@ export async function syncHorse(
     nameKo: entry.hrName,
     nameEn: entry.hrNameEn || horseDetail?.hrNameEn || null,
     gender: parseGender(entry.sex),
-    rating: entry.rating || horseDetail?.rating || null,
+    rating: parseRating(entry.rating) ?? parseRating(horseDetail?.rating),
   }
 
   // 상세 정보가 있으면 추가
@@ -346,35 +354,46 @@ export async function syncRacesByDate(date: Date): Promise<SyncResult> {
     const races = await kraClient.getRacesByDate(dateStr)
     console.log(`   - 경주 ${races.length}개 발견`)
 
+    // 2. 해당 날짜의 전체 출전마 한 번에 조회 (API 호출 최적화)
+    const allEntries = await kraClient.getEntriesByDate(dateStr)
+    console.log(`   - 전체 출전마 ${allEntries.length}마 조회됨`)
+
+    // meet별로 출전마 그룹화 (meet + rcNo 조합으로 필터링)
+    const entriesByRace = new Map<string, KRAHorseEntry[]>()
+    for (const entry of allEntries) {
+      const key = `${entry.meet}_${entry.rcNo}`
+      if (!entriesByRace.has(key)) {
+        entriesByRace.set(key, [])
+      }
+      entriesByRace.get(key)!.push(entry)
+    }
+
     for (const raceInfo of races) {
       try {
-        // 2. 경주 정보 저장
+        // 3. 경주 정보 저장
         const raceId = await syncRace(raceInfo)
         result.stats.racesCreated++
 
-        // 3. 출전마 정보 조회
-        const entries = await kraClient.getHorseEntries(
-          raceInfo.rcDate,
-          raceInfo.rcNo,
-          raceInfo.meet
-        )
+        // 4. 해당 경주의 출전마 필터링
+        const raceKey = `${raceInfo.meet}_${raceInfo.rcNo}`
+        const entries = entriesByRace.get(raceKey) || []
         console.log(`   - 경주 ${raceInfo.rcNo}: 출전마 ${entries.length}마`)
 
         for (const entry of entries) {
           try {
-            // 4. 말 정보 동기화
+            // 5. 말 정보 동기화
             const horseId = await syncHorse(entry)
             result.stats.horsesCreated++
 
-            // 5. 기수 정보 동기화
+            // 6. 기수 정보 동기화
             const jockeyId = await syncJockey(entry.jkNo, entry.jkName)
             result.stats.jockeysCreated++
 
-            // 6. 조교사 정보 동기화
+            // 7. 조교사 정보 동기화
             const trainerId = await syncTrainer(entry.trNo, entry.trName)
             result.stats.trainersCreated++
 
-            // 7. 출전 정보 동기화
+            // 8. 출전 정보 동기화
             await syncRaceEntry(raceId, entry, horseId, jockeyId, trainerId)
             result.stats.entriesCreated++
           } catch (error) {
@@ -480,7 +499,7 @@ export async function updateRaceResults(
     }
 
     // 해당 경주 찾기
-    const raceDate = KRAApiClient.parseDate(rcDate)
+    const raceDate = KRAApiClient.parseDate(String(rcDate))
     const trackId = TRACK_CODE_MAP[meet] || 1
 
     const race = await prisma.race.findUnique({

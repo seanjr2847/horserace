@@ -12,7 +12,7 @@ export const predictionsApi = {
     predictionTypes: PredictionType[]
   ): Promise<PredictionResponse> => {
     const response = await apiClient.post<PredictionResponse>(
-      '/v1/predictions/generate',
+      '/predictions/generate',
       {
         race_id: raceId,
         prediction_types: predictionTypes,
@@ -23,14 +23,14 @@ export const predictionsApi = {
 
   getPrediction: async (raceId: number): Promise<Prediction[]> => {
     const response = await apiClient.get<{ predictions: Prediction[] }>(
-      `/v1/predictions/${raceId}`
+      `/predictions/${raceId}`
     )
     return response.data.predictions
   },
 
   getPredictionById: async (predictionId: number): Promise<Prediction> => {
     const response = await apiClient.get<Prediction>(
-      `/v1/predictions/detail/${predictionId}`
+      `/predictions/detail/${predictionId}`
     )
     return response.data
   },
