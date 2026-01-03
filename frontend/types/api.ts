@@ -31,8 +31,10 @@ export interface RaceListResponse {
 }
 
 export interface RaceDetailResponse {
+  success?: boolean
   race: Race
   entries: RaceEntry[]
+  predictions: any[]
 }
 
 export interface HealthCheckResponse {

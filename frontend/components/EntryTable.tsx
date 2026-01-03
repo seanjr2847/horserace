@@ -1,10 +1,16 @@
-import type { RaceEntry } from '@/types'
-
 interface EntryTableProps {
-  entries: RaceEntry[]
+  entries: any[]
 }
 
 export default function EntryTable({ entries }: EntryTableProps) {
+  if (!entries || entries.length === 0) {
+    return (
+      <div className="text-center py-8 text-gray-500">
+        출전 정보가 없습니다
+      </div>
+    )
+  }
+
   return (
     <div className="overflow-x-auto">
       <table className="min-w-full divide-y divide-gray-200">
@@ -37,57 +43,57 @@ export default function EntryTable({ entries }: EntryTableProps) {
           {entries.map((entry) => (
             <tr key={entry.id} className="hover:bg-gray-50">
               <td className="px-4 py-4 whitespace-nowrap">
-                <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary-100 text-primary-800 font-semibold">
-                  {entry.gate_number}
+                <div className="flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 text-blue-800 font-semibold">
+                  {entry.gateNumber}
                 </div>
               </td>
               <td className="px-4 py-4 whitespace-nowrap">
                 <div className="text-sm font-medium text-gray-900">
-                  {entry.horse?.name_ko || '-'}
+                  {entry.horse?.nameKo || '-'}
                 </div>
                 {entry.horse && (
                   <div className="text-xs text-gray-500">
-                    {entry.horse.total_wins}승 / {entry.horse.total_races}전
+                    {entry.horse.totalWins}승 / {entry.horse.totalRaces}전
                   </div>
                 )}
               </td>
               <td className="px-4 py-4 whitespace-nowrap">
                 <div className="text-sm text-gray-900">
-                  {entry.jockey?.name_ko || '-'}
+                  {entry.jockey?.nameKo || '-'}
                 </div>
                 {entry.jockey && (
                   <div className="text-xs text-gray-500">
-                    승률 {(entry.jockey.win_rate * 100).toFixed(1)}%
+                    승률 {(Number(entry.jockey.winRate) * 100).toFixed(1)}%
                   </div>
                 )}
               </td>
               <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
-                {entry.trainer?.name_ko || '-'}
+                {entry.trainer?.nameKo || '-'}
               </td>
               <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
-                {entry.horse_weight_kg ? `${entry.horse_weight_kg}kg` : '-'}
+                {entry.horseWeightKg ? `${entry.horseWeightKg}kg` : '-'}
               </td>
               <td className="px-4 py-4 whitespace-nowrap">
                 {entry.odds ? (
-                  <span className="text-sm font-semibold text-primary-600">
-                    {entry.odds.toFixed(1)}
+                  <span className="text-sm font-semibold text-blue-600">
+                    {Number(entry.odds).toFixed(1)}
                   </span>
                 ) : (
                   <span className="text-sm text-gray-400">-</span>
                 )}
               </td>
               <td className="px-4 py-4 whitespace-nowrap">
-                {entry.finish_position ? (
+                {entry.finishPosition ? (
                   <span
                     className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                      entry.finish_position === 1
+                      entry.finishPosition === 1
                         ? 'bg-yellow-100 text-yellow-800'
-                        : entry.finish_position <= 3
+                        : entry.finishPosition <= 3
                         ? 'bg-green-100 text-green-800'
                         : 'bg-gray-100 text-gray-800'
                     }`}
                   >
-                    {entry.finish_position}위
+                    {entry.finishPosition}위
                   </span>
                 ) : (
                   <span className="text-sm text-gray-400">-</span>

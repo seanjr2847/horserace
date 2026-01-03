@@ -93,7 +93,7 @@ export class RacePredictionEngine {
         try {
           predictionData = await this.geminiClient.generateJSON(prompt, {
             temperature,
-            maxOutputTokens: 2048,
+            maxOutputTokens: 8192,
           })
           break // 성공
         } catch (error) {

@@ -7,7 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { syncRacesByDate } from '@/lib/services/kra/sync'
+import { syncRacesByDate, syncAllOddsForDate } from '@/lib/services/kra/sync'
 
 // 동기화 중복 방지를 위한 락
 let isSyncing = false
@@ -34,6 +34,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const trackId = searchParams.get('trackId')
     const forceSync = searchParams.get('sync') === 'true'
+    const syncOddsOnly = searchParams.get('syncOdds') === 'true'
 
     // 한국 시간 기준 오늘 날짜
     const today = getKoreanToday()
@@ -81,10 +82,56 @@ export async function GET(request: NextRequest) {
       ],
     })
 
+    // 배당률만 동기화 요청
+    if (syncOddsOnly && !isSyncing) {
+      isSyncing = true
+      console.log('배당률 동기화 시작...')
+      try {
+        const oddsCount = await syncAllOddsForDate(today)
+        console.log(`배당률 동기화 완료: ${oddsCount}마 업데이트`)
+
+        // 배당률 업데이트 후 다시 조회
+        races = await prisma.race.findMany({
+          where,
+          include: {
+            track: true,
+            entries: {
+              include: {
+                horse: true,
+                jockey: true,
+                trainer: true,
+              },
+              orderBy: {
+                gateNumber: 'asc',
+              },
+            },
+            predictions: {
+              select: {
+                id: true,
+                predictionType: true,
+                confidenceScore: true,
+                createdAt: true,
+              },
+              orderBy: {
+                createdAt: 'desc',
+              },
+            },
+          },
+          orderBy: [
+            { raceNumber: 'asc' },
+          ],
+        })
+      } catch (oddsError) {
+        console.error('배당률 동기화 실패:', oddsError)
+      } finally {
+        isSyncing = false
+      }
+    }
+
     // 오늘 경주가 없고, 아직 오늘 동기화를 안 했으면 KRA API에서 가져오기
     const shouldSync = (races.length === 0 && lastSyncDate !== todayStr) || forceSync
 
-    if (shouldSync && !isSyncing) {
+    if (shouldSync && !isSyncing && !syncOddsOnly) {
       isSyncing = true
       console.log('KRA API 동기화 시작...')
 

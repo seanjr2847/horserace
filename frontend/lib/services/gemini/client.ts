@@ -191,17 +191,32 @@ export class GeminiClient {
 
       console.log('📝 Cleaned JSON (first 500):', jsonText.substring(0, 500))
 
-      // JSON 파싱 시도
-      try {
-        const parsed = JSON.parse(jsonText)
-        return parsed as T
-      } catch (parseError) {
-        // 파싱 실패 시 추가 복구 시도
-        console.warn('⚠️ 1차 파싱 실패, 복구 시도 중...')
-        const repairedJson = this.repairJson(jsonText)
-        const parsed = JSON.parse(repairedJson)
-        return parsed as T
+      // JSON 파싱 시도 (여러 방법)
+      const parseAttempts = [
+        () => JSON.parse(jsonText),
+        () => JSON.parse(this.repairJson(jsonText)),
+        () => JSON.parse(jsonText.replace(/\n/g, ' ').replace(/\r/g, '')),
+        () => {
+          // 가장 공격적인 정리: 문자열 내용만 보존
+          const minified = this.minifyJson(jsonText)
+          return JSON.parse(minified)
+        }
+      ]
+
+      for (let i = 0; i < parseAttempts.length; i++) {
+        try {
+          const parsed = parseAttempts[i]()
+          if (i > 0) console.log(`✅ ${i + 1}차 파싱 시도 성공`)
+          return parsed as T
+        } catch (err) {
+          if (i < parseAttempts.length - 1) {
+            console.warn(`⚠️ ${i + 1}차 파싱 실패, 다음 방법 시도...`)
+          }
+        }
       }
+
+      // 모든 시도 실패
+      throw new SyntaxError('모든 JSON 파싱 시도 실패')
     } catch (error: any) {
       if (error instanceof SyntaxError) {
         throw new GeminiApiError(
@@ -411,6 +426,28 @@ export class GeminiClient {
     repaired = repaired.replace(/:\s*]/g, ': null]')
 
     return repaired
+  }
+
+  private minifyJson(text: string): string {
+    // 문자열 값들을 임시로 보호
+    const strings: string[] = []
+    let minified = text.replace(/"(?:[^"\\]|\\.)*"/g, (match) => {
+      strings.push(match)
+      return `__STRING_${strings.length - 1}__`
+    })
+
+    // 구조적 공백 제거
+    minified = minified
+      .replace(/\s+/g, ' ')
+      .replace(/\s*([{}\[\]:,])\s*/g, '$1')
+      .trim()
+
+    // 문자열 복원
+    minified = minified.replace(/__STRING_(\d+)__/g, (_, index) => {
+      return strings[parseInt(index)]
+    })
+
+    return minified
   }
 }
 

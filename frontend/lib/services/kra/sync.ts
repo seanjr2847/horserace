@@ -289,6 +289,15 @@ export async function syncRaceEntry(
   jockeyId: number,
   trainerId: number
 ): Promise<void> {
+  // 디버깅: KRA API 응답 확인
+  console.log(`📊 Entry 동기화: ${entry.hrName}`, {
+    ordNo: entry.ordNo,
+    wgHr: entry.wgHr,
+    wgBudam: entry.wgBudam,
+    odds: entry.odds,
+    ord: entry.ord,
+  })
+
   await prisma.raceEntry.upsert({
     where: {
       raceId_horseId: {
@@ -299,7 +308,7 @@ export async function syncRaceEntry(
     update: {
       jockeyId,
       trainerId,
-      gateNumber: entry.ordNo || entry.hrNo ? parseInt(entry.hrNo) : 1,
+      gateNumber: entry.ordNo ? parseInt(String(entry.ordNo)) : 1,
       horseWeightKg: entry.wgHr ? entry.wgHr.toString() : null,
       jockeyWeightKg: entry.wgBudam ? entry.wgBudam.toString() : null,
       odds: entry.odds ? entry.odds.toString() : null,
@@ -311,7 +320,7 @@ export async function syncRaceEntry(
       horseId,
       jockeyId,
       trainerId,
-      gateNumber: entry.ordNo || entry.hrNo ? parseInt(entry.hrNo) : 1,
+      gateNumber: entry.ordNo ? parseInt(String(entry.ordNo)) : 1,
       horseWeightKg: entry.wgHr ? entry.wgHr.toString() : null,
       jockeyWeightKg: entry.wgBudam ? entry.wgBudam.toString() : null,
       odds: entry.odds ? entry.odds.toString() : null,
@@ -400,6 +409,14 @@ export async function syncRacesByDate(date: Date): Promise<SyncResult> {
             console.error(`     ⚠️ 출전마 ${entry.hrName} 동기화 실패:`, error)
             result.stats.errors++
           }
+        }
+
+        // 9. 배당률 동기화 시도 (확정된 배당률이 있을 경우)
+        try {
+          await syncOddsForRace(dateStr, raceInfo.rcNo, raceInfo.meet)
+        } catch (oddsError) {
+          // 배당률 동기화 실패는 무시 (아직 확정되지 않은 경주일 수 있음)
+          console.warn(`   ⚠️ 배당률 동기화 실패 (무시됨)`)
         }
       } catch (error) {
         console.error(`   ⚠️ 경주 ${raceInfo.rcNo} 동기화 실패:`, error)
@@ -552,4 +569,174 @@ export async function updateRaceResults(
     console.error(`경주 결과 업데이트 실패:`, error)
     throw error
   }
+}
+
+// ============================================
+// 배당률 동기화
+// ============================================
+
+export async function syncOddsForRace(
+  rcDate: string,
+  rcNo: number,
+  meet: string
+): Promise<number> {
+  const kraClient = getKRAClient()
+  let updatedCount = 0
+
+  try {
+    // 단승 배당률 조회
+    const oddsData = await kraClient.getOdds(rcDate, rcNo, meet, 'WIN')
+
+    if (oddsData.length === 0) {
+      console.log(`   - 경주 ${rcNo}R: 배당률 데이터 없음 (아직 미확정)`)
+      return 0
+    }
+
+    // 해당 경주 찾기
+    const raceDate = KRAApiClient.parseDate(String(rcDate))
+    const trackId = TRACK_CODE_MAP[meet] || 1
+
+    const race = await prisma.race.findUnique({
+      where: {
+        raceDate_raceNumber_trackId: {
+          raceDate,
+          raceNumber: rcNo,
+          trackId,
+        },
+      },
+      include: {
+        entries: {
+          include: {
+            horse: true,
+          },
+        },
+      },
+    })
+
+    if (!race) {
+      console.log(`   - 경주 ${rcNo}R: DB에서 찾을 수 없음`)
+      return 0
+    }
+
+    // 배당률 업데이트
+    for (const odds of oddsData) {
+      const oddsAny = odds as any
+      const hrNo = oddsAny.hrNo || oddsAny.hr_no
+      const winOdds = oddsAny.winOdds || oddsAny.win_odds || oddsAny.odds
+
+      if (!hrNo || !winOdds) continue
+
+      // 말 번호로 엔트리 찾기
+      const entry = race.entries.find(
+        (e) => e.horse.registrationNumber === hrNo || e.horse.nameKo === oddsAny.hrName
+      )
+
+      if (entry && winOdds) {
+        await prisma.raceEntry.update({
+          where: { id: entry.id },
+          data: {
+            odds: winOdds.toString(),
+          },
+        })
+        updatedCount++
+      }
+    }
+
+    if (updatedCount > 0) {
+      console.log(`   - 경주 ${rcNo}R: ${updatedCount}마 배당률 업데이트`)
+    }
+  } catch (error) {
+    // 배당률 조회 실패는 치명적이지 않으므로 경고만 출력
+    console.warn(`   - 경주 ${rcNo}R 배당률 조회 실패:`, error instanceof Error ? error.message : error)
+  }
+
+  return updatedCount
+}
+
+// ============================================
+// 전체 배당률 일괄 동기화
+// ============================================
+
+export async function syncAllOddsForDate(date: Date): Promise<number> {
+  const kraClient = getKRAClient()
+  const dateStr = KRAApiClient.formatDate(date)
+  let totalUpdated = 0
+
+  try {
+    console.log(`📊 ${dateStr} 배당률 동기화 시작...`)
+
+    // 해당 날짜의 전체 배당률 조회
+    const allOdds = await kraClient.getAllOddsByDate(dateStr)
+
+    if (allOdds.length === 0) {
+      console.log(`   - 배당률 데이터 없음`)
+      return 0
+    }
+
+    // meet와 rcNo로 그룹화
+    const oddsByRace = new Map<string, any[]>()
+    for (const odds of allOdds) {
+      const meet = odds.meet || odds.rc_meet
+      const rcNo = odds.rcNo || odds.rc_no
+      const key = `${meet}_${rcNo}`
+      if (!oddsByRace.has(key)) {
+        oddsByRace.set(key, [])
+      }
+      oddsByRace.get(key)!.push(odds)
+    }
+
+    // 각 경주별로 업데이트
+    for (const [key, raceOdds] of oddsByRace) {
+      const [meet, rcNoStr] = key.split('_')
+      const rcNo = parseInt(rcNoStr)
+      const raceDate = KRAApiClient.parseDate(dateStr)
+      const trackId = TRACK_CODE_MAP[meet] || 1
+
+      const race = await prisma.race.findUnique({
+        where: {
+          raceDate_raceNumber_trackId: {
+            raceDate,
+            raceNumber: rcNo,
+            trackId,
+          },
+        },
+        include: {
+          entries: {
+            include: {
+              horse: true,
+            },
+          },
+        },
+      })
+
+      if (!race) continue
+
+      for (const odds of raceOdds) {
+        const hrNo = odds.hrNo || odds.hr_no
+        const winOdds = odds.winOdds || odds.win_odds || odds.odds
+
+        if (!hrNo || !winOdds) continue
+
+        const entry = race.entries.find(
+          (e) => e.horse.registrationNumber === hrNo
+        )
+
+        if (entry) {
+          await prisma.raceEntry.update({
+            where: { id: entry.id },
+            data: {
+              odds: winOdds.toString(),
+            },
+          })
+          totalUpdated++
+        }
+      }
+    }
+
+    console.log(`✅ 배당률 동기화 완료: ${totalUpdated}마 업데이트`)
+  } catch (error) {
+    console.error(`배당률 동기화 실패:`, error)
+  }
+
+  return totalUpdated
 }

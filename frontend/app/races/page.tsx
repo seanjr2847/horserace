@@ -19,6 +19,7 @@ function RacesContent() {
 
   const [races, setRaces] = useState<Race[]>([])
   const [loading, setLoading] = useState(true)
+  const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [pagination, setPagination] = useState({
     page: 1,
@@ -92,6 +93,44 @@ function RacesContent() {
     router.push(`/races?${params.toString()}`)
   }
 
+  // 데이터 동기화 (전체)
+  const handleFullSync = async () => {
+    try {
+      setSyncing(true)
+      const res = await fetch('/api/races/today?sync=true')
+      const data = await res.json()
+      if (data.success) {
+        alert(`동기화 완료! ${data.raceCount}개 경주 로드됨`)
+        loadRaces() // 목록 새로고침
+      } else {
+        alert('동기화 실패: ' + (data.message || '알 수 없는 오류'))
+      }
+    } catch (err) {
+      alert('동기화 중 오류 발생')
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  // 배당률만 동기화
+  const handleOddsSync = async () => {
+    try {
+      setSyncing(true)
+      const res = await fetch('/api/races/today?syncOdds=true')
+      const data = await res.json()
+      if (data.success) {
+        alert('배당률 새로고침 완료!')
+        loadRaces() // 목록 새로고침
+      } else {
+        alert('배당률 동기화 실패: ' + (data.message || '알 수 없는 오류'))
+      }
+    } catch (err) {
+      alert('배당률 동기화 중 오류 발생')
+    } finally {
+      setSyncing(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="container mx-auto px-4 py-8">
@@ -111,11 +150,47 @@ function RacesContent() {
   return (
     <div className="container mx-auto px-4 py-8">
       {/* 헤더 */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">경주 목록</h1>
-        <p className="text-gray-600">
-          전체 {pagination.total.toLocaleString()}개의 경주
-        </p>
+      <div className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">경주 목록</h1>
+          <p className="text-gray-600">
+            전체 {pagination.total.toLocaleString()}개의 경주
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={handleOddsSync}
+            disabled={syncing}
+            className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+          >
+            {syncing ? (
+              <>
+                <span className="animate-spin">⏳</span>
+                동기화 중...
+              </>
+            ) : (
+              <>
+                📊 배당률 새로고침
+              </>
+            )}
+          </button>
+          <button
+            onClick={handleFullSync}
+            disabled={syncing}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+          >
+            {syncing ? (
+              <>
+                <span className="animate-spin">⏳</span>
+                동기화 중...
+              </>
+            ) : (
+              <>
+                🔄 전체 동기화
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* 필터 */}
