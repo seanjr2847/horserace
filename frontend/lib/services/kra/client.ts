@@ -1,6 +1,6 @@
 /**
  * KRA API 클라이언트
- * 한국마사회 공공데이터포털 API 연동
+ * 한국마사회 공공데이터포털 API 연동 (실제 엔드포인트)
  */
 
 import axios, { AxiosInstance, AxiosError } from 'axios'
@@ -14,7 +14,6 @@ import {
   KRATrainerInfo,
   KRARaceResult,
   KRAOddsInfo,
-  KRAQuinellaOdds,
   KRAApiError,
 } from './types'
 
@@ -22,11 +21,35 @@ import {
 // 설정 상수
 // ============================================
 
-const KRA_API_BASE_URL = 'https://apis.data.go.kr/B551015' // KRA API 기본 URL (예시)
+const KRA_API_BASE_URL = 'https://apis.data.go.kr/B551015'
 const DEFAULT_TIMEOUT = 15000 // 15초
-const MAX_RETRIES = 3 // 최대 재시도 횟수
-const RETRY_DELAY = 1000 // 재시도 기본 딜레이 (ms)
-const RATE_LIMIT_DELAY = 100 // API 호출 간 최소 딜레이 (ms)
+const MAX_RETRIES = 3
+const RETRY_DELAY = 1000
+const RATE_LIMIT_DELAY = 100
+
+// ============================================
+// 실제 API 엔드포인트 (공공데이터포털 확인됨)
+// ============================================
+
+const ENDPOINTS = {
+  // 1. RC경마경주정보 (15063950)
+  SEOUL_RACE: '/API186_1/SeoulRace_1',
+
+  // 2. 출전표정보 (15058677)
+  ENTRY_SHEET: '/API26_2/entrySheet_2',
+
+  // 3. AI학습용_경주결과 (15143803)
+  RACE_RESULT: '/API155/raceResult',
+
+  // 4. 확정배당율 통합 정보 (15058559)
+  INTEGRATED_ODDS: '/API160_1/integratedInfo_1',
+
+  // 5. 조교사정보 (15130588)
+  TRAINER_INFO: '/API308/trainerInfo',
+
+  // 6. 말정보 및 개체식별 (15105155)
+  HORSE_INFO: '/horseinfohi/gethorseinfohi',
+}
 
 // ============================================
 // KRA API 클라이언트 클래스
@@ -46,7 +69,6 @@ export class KRAApiClient {
       )
     }
 
-    // Axios 인스턴스 생성
     this.client = axios.create({
       baseURL: KRA_API_BASE_URL,
       timeout: DEFAULT_TIMEOUT,
@@ -55,21 +77,17 @@ export class KRAApiClient {
       },
     })
 
-    // 응답 인터셉터: 에러 처리
     this.client.interceptors.response.use(
       (response) => response,
       (error: AxiosError) => {
         if (error.response) {
-          // 서버 응답 에러
           throw new KRAApiError(
             `KRA API 에러: ${error.response.statusText}`,
             error.response.status
           )
         } else if (error.request) {
-          // 요청은 보냈지만 응답 없음
           throw new KRAApiError('KRA API 서버로부터 응답이 없습니다.')
         } else {
-          // 요청 설정 중 에러
           throw new KRAApiError(`요청 설정 에러: ${error.message}`)
         }
       }
@@ -93,7 +111,7 @@ export class KRAApiClient {
   }
 
   // ============================================
-  // 재시도 로직 (Exponential Backoff)
+  // 재시도 로직
   // ============================================
 
   private async retryRequest<T>(
@@ -104,7 +122,7 @@ export class KRAApiClient {
       return await requestFn()
     } catch (error) {
       if (retries > 0 && this.isRetryableError(error)) {
-        const delay = RETRY_DELAY * (MAX_RETRIES - retries + 1) // Exponential backoff
+        const delay = RETRY_DELAY * (MAX_RETRIES - retries + 1)
         console.warn(`API 요청 실패, ${delay}ms 후 재시도... (남은 횟수: ${retries})`)
         await new Promise((resolve) => setTimeout(resolve, delay))
         return this.retryRequest(requestFn, retries - 1)
@@ -114,13 +132,10 @@ export class KRAApiClient {
   }
 
   private isRetryableError(error: any): boolean {
-    // 재시도 가능한 에러인지 판단
     if (error instanceof KRAApiError) {
-      // 5xx 서버 에러는 재시도
       if (error.statusCode && error.statusCode >= 500) {
         return true
       }
-      // 타임아웃, 네트워크 에러도 재시도
       if (error.message.includes('timeout') || error.message.includes('응답이 없습니다')) {
         return true
       }
@@ -134,20 +149,21 @@ export class KRAApiClient {
 
   private async request<T>(
     endpoint: string,
-    params: Partial<KRAApiParams> = {}
+    params: Record<string, any> = {}
   ): Promise<KRAApiResponse<T>> {
     await this.waitForRateLimit()
 
     const requestFn = async () => {
       const response = await this.client.get<KRAApiResponse<T>>(endpoint, {
         params: {
-          serviceKey: this.apiKey,
-          numOfRows: 100, // 기본값
+          ServiceKey: this.apiKey,
+          pageNo: 1,
+          numOfRows: 100,
+          _type: 'json',
           ...params,
         },
       })
 
-      // API 응답 검증
       const resultCode = response.data.response.header.resultCode
       if (resultCode !== '00') {
         throw new KRAApiError(
@@ -164,15 +180,17 @@ export class KRAApiClient {
   }
 
   // ============================================
-  // 경주 정보 API
+  // 1. 경주 정보 API (RC경마경주정보)
   // ============================================
 
   /**
    * 특정 날짜의 경주 목록 조회
+   * API: RC경마경주정보 (15063950)
    */
   async getRacesByDate(rcDate: string, meet?: string): Promise<KRARaceInfo[]> {
-    const response = await this.request<KRARaceInfo>('/api/raceInfo', {
-      rcDate,
+    const response = await this.request<KRARaceInfo>(ENDPOINTS.SEOUL_RACE, {
+      rc_date_fr: rcDate,
+      rc_date_to: rcDate,
       meet,
       numOfRows: 1000,
     })
@@ -183,15 +201,15 @@ export class KRAApiClient {
   /**
    * 특정 경주 상세 정보 조회
    */
-  async getRaceDetail(rcDate: string, rcNo: number, meet: string): Promise<KRARaceInfo | null> {
-    const response = await this.request<KRARaceInfo>('/api/raceInfo', {
-      rcDate,
-      rcNo,
+  async getRaceDetail(rcDate: string, rcNo: number, meet?: string): Promise<KRARaceInfo | null> {
+    const response = await this.request<KRARaceInfo>(ENDPOINTS.SEOUL_RACE, {
+      rc_date_fr: rcDate,
+      rc_date_to: rcDate,
       meet,
     })
 
     const items = response.response.body.items?.item || []
-    return items.length > 0 ? items[0] : null
+    return items.find((item) => item.rcNo === rcNo) || null
   }
 
   /**
@@ -202,9 +220,9 @@ export class KRAApiClient {
     endDate: string,
     meet?: string
   ): Promise<KRARaceInfo[]> {
-    const response = await this.request<KRARaceInfo>('/api/raceInfo', {
-      startDate,
-      endDate,
+    const response = await this.request<KRARaceInfo>(ENDPOINTS.SEOUL_RACE, {
+      rc_date_fr: startDate,
+      rc_date_to: endDate,
       meet,
       numOfRows: 10000,
     })
@@ -213,16 +231,17 @@ export class KRAApiClient {
   }
 
   // ============================================
-  // 출전마 정보 API
+  // 2. 출전마 정보 API (출전표정보)
   // ============================================
 
   /**
    * 특정 경주의 출전마 목록 조회
+   * API: 출전표정보 (15058677)
    */
   async getHorseEntries(rcDate: string, rcNo: number, meet: string): Promise<KRAHorseEntry[]> {
-    const response = await this.request<KRAHorseEntry>('/api/entryInfo', {
-      rcDate,
-      rcNo,
+    const response = await this.request<KRAHorseEntry>(ENDPOINTS.ENTRY_SHEET, {
+      rc_date: rcDate,
+      rc_no: rcNo,
       meet,
       numOfRows: 100,
     })
@@ -231,119 +250,117 @@ export class KRAApiClient {
   }
 
   /**
-   * 말 상세 정보 조회
+   * 특정 날짜의 전체 출전마 조회
    */
-  async getHorseDetail(hrNo: string): Promise<KRAHorseDetail | null> {
-    const response = await this.request<KRAHorseDetail>('/api/horseInfo', {
-      hrNo,
-    })
-
-    const items = response.response.body.items?.item || []
-    return items.length > 0 ? items[0] : null
-  }
-
-  /**
-   * 말 과거 경주 기록 조회
-   */
-  async getHorseHistory(
-    hrNo: string,
-    startDate?: string,
-    endDate?: string
-  ): Promise<KRARaceResult[]> {
-    const response = await this.request<KRARaceResult>('/api/horseHistory', {
-      hrNo,
-      startDate,
-      endDate,
+  async getEntriesByDate(rcDate: string, meet?: string): Promise<KRAHorseEntry[]> {
+    const response = await this.request<KRAHorseEntry>(ENDPOINTS.ENTRY_SHEET, {
+      rc_date: rcDate,
+      meet,
       numOfRows: 1000,
     })
 
     return response.response.body.items?.item || []
   }
 
-  // ============================================
-  // 기수 정보 API
-  // ============================================
-
   /**
-   * 기수 정보 조회
+   * 월별 출전마 조회
    */
-  async getJockeyInfo(jkNo: string): Promise<KRAJockeyInfo | null> {
-    const response = await this.request<KRAJockeyInfo>('/api/jockeyInfo', {
-      jkNo,
-    })
-
-    const items = response.response.body.items?.item || []
-    return items.length > 0 ? items[0] : null
-  }
-
-  /**
-   * 전체 기수 목록 조회
-   */
-  async getAllJockeys(): Promise<KRAJockeyInfo[]> {
-    const response = await this.request<KRAJockeyInfo>('/api/jockeyInfo', {
-      numOfRows: 1000,
+  async getEntriesByMonth(rcMonth: string, meet?: string): Promise<KRAHorseEntry[]> {
+    const response = await this.request<KRAHorseEntry>(ENDPOINTS.ENTRY_SHEET, {
+      rc_month: rcMonth,
+      meet,
+      numOfRows: 10000,
     })
 
     return response.response.body.items?.item || []
   }
 
   // ============================================
-  // 조교사 정보 API
-  // ============================================
-
-  /**
-   * 조교사 정보 조회
-   */
-  async getTrainerInfo(trNo: string): Promise<KRATrainerInfo | null> {
-    const response = await this.request<KRATrainerInfo>('/api/trainerInfo', {
-      trNo,
-    })
-
-    const items = response.response.body.items?.item || []
-    return items.length > 0 ? items[0] : null
-  }
-
-  /**
-   * 전체 조교사 목록 조회
-   */
-  async getAllTrainers(): Promise<KRATrainerInfo[]> {
-    const response = await this.request<KRATrainerInfo>('/api/trainerInfo', {
-      numOfRows: 1000,
-    })
-
-    return response.response.body.items?.item || []
-  }
-
-  // ============================================
-  // 경주 결과 API
+  // 3. 경주 결과 API (AI학습용_경주결과)
   // ============================================
 
   /**
    * 경주 결과 조회
+   * API: AI학습용_경주결과 (15143803)
    */
   async getRaceResults(rcDate: string, rcNo: number, meet: string): Promise<KRARaceResult[]> {
-    const response = await this.request<KRARaceResult>('/api/raceResult', {
-      rcDate,
-      rcNo,
-      meet,
+    const rccrsCode = this.convertMeetToRccrsCode(meet)
+    const response = await this.request<KRARaceResult>(ENDPOINTS.RACE_RESULT, {
+      race_dt: rcDate,
+      rccrs_cd: rccrsCode,
       numOfRows: 100,
+    })
+
+    const items = response.response.body.items?.item || []
+    return items.filter((item) => item.rcNo === rcNo)
+  }
+
+  /**
+   * 특정 날짜의 전체 경주 결과 조회
+   */
+  async getRaceResultsByDate(rcDate: string, meet?: string): Promise<KRARaceResult[]> {
+    const rccrsCode = meet ? this.convertMeetToRccrsCode(meet) : undefined
+    const response = await this.request<KRARaceResult>(ENDPOINTS.RACE_RESULT, {
+      race_dt: rcDate,
+      rccrs_cd: rccrsCode,
+      numOfRows: 1000,
     })
 
     return response.response.body.items?.item || []
   }
 
+  /**
+   * 특정 말의 과거 경주 기록 조회
+   */
+  async getHorseHistory(
+    hrNo: string,
+    startDate: string,
+    endDate: string,
+    meet?: string
+  ): Promise<KRARaceResult[]> {
+    const rccrsCode = meet ? this.convertMeetToRccrsCode(meet) : undefined
+
+    // 날짜 범위를 순회하며 데이터 수집 (API 제한으로 인해 한 번에 조회 불가)
+    const results: KRARaceResult[] = []
+    const currentDate = new Date(this.parseKRADate(startDate))
+    const finalDate = new Date(this.parseKRADate(endDate))
+
+    while (currentDate <= finalDate) {
+      const dateStr = KRAApiClient.formatDate(currentDate)
+
+      try {
+        const dayResults = await this.getRaceResultsByDate(dateStr, meet)
+        const horseResults = dayResults.filter((result) => result.hrNo === hrNo)
+        results.push(...horseResults)
+      } catch (error) {
+        console.warn(`날짜 ${dateStr} 데이터 조회 실패:`, error)
+      }
+
+      currentDate.setDate(currentDate.getDate() + 1)
+    }
+
+    return results
+  }
+
   // ============================================
-  // 배당률 API
+  // 4. 배당률 API (확정배당율 통합 정보)
   // ============================================
 
   /**
    * 단승/복승 배당률 조회
+   * API: 확정배당율 통합 정보 (15058559)
    */
-  async getOdds(rcDate: string, rcNo: number, meet: string): Promise<KRAOddsInfo[]> {
-    const response = await this.request<KRAOddsInfo>('/api/oddsInfo', {
-      rcDate,
-      rcNo,
+  async getOdds(
+    rcDate: string,
+    rcNo: number,
+    meet: string,
+    pool: 'WIN' | 'PLC' = 'WIN'
+  ): Promise<KRAOddsInfo[]> {
+    const response = await this.request<any>(ENDPOINTS.INTEGRATED_ODDS, {
+      rc_date: rcDate,
+      rc_no: rcNo,
       meet,
+      pool,
       numOfRows: 100,
     })
 
@@ -353,15 +370,143 @@ export class KRAApiClient {
   /**
    * 복연승 배당률 조회
    */
-  async getQuinellaOdds(
-    rcDate: string,
-    rcNo: number,
-    meet: string
-  ): Promise<KRAQuinellaOdds[]> {
-    const response = await this.request<KRAQuinellaOdds>('/api/quinellaOdds', {
-      rcDate,
-      rcNo,
+  async getQuinellaOdds(rcDate: string, rcNo: number, meet: string): Promise<any[]> {
+    const response = await this.request<any>(ENDPOINTS.INTEGRATED_ODDS, {
+      rc_date: rcDate,
+      rc_no: rcNo,
       meet,
+      pool: 'QNL',
+      numOfRows: 1000,
+    })
+
+    return response.response.body.items?.item || []
+  }
+
+  /**
+   * 쌍승식 배당률 조회
+   */
+  async getExactaOdds(rcDate: string, rcNo: number, meet: string): Promise<any[]> {
+    const response = await this.request<any>(ENDPOINTS.INTEGRATED_ODDS, {
+      rc_date: rcDate,
+      rc_no: rcNo,
+      meet,
+      pool: 'EXA',
+      numOfRows: 1000,
+    })
+
+    return response.response.body.items?.item || []
+  }
+
+  /**
+   * 삼복승 배당률 조회
+   */
+  async getTrifectaOdds(rcDate: string, rcNo: number, meet: string): Promise<any[]> {
+    const response = await this.request<any>(ENDPOINTS.INTEGRATED_ODDS, {
+      rc_date: rcDate,
+      rc_no: rcNo,
+      meet,
+      pool: 'TRI',
+      numOfRows: 1000,
+    })
+
+    return response.response.body.items?.item || []
+  }
+
+  /**
+   * 특정 날짜의 전체 배당률 조회
+   */
+  async getAllOddsByDate(rcDate: string, meet?: string): Promise<any[]> {
+    const response = await this.request<any>(ENDPOINTS.INTEGRATED_ODDS, {
+      rc_date: rcDate,
+      meet,
+      numOfRows: 10000,
+    })
+
+    return response.response.body.items?.item || []
+  }
+
+  // ============================================
+  // 5. 조교사 정보 API
+  // ============================================
+
+  /**
+   * 조교사 정보 조회
+   * API: 조교사정보_영문추가 (15130588)
+   */
+  async getTrainerInfo(trNo: string, meet?: string): Promise<KRATrainerInfo | null> {
+    const response = await this.request<KRATrainerInfo>(ENDPOINTS.TRAINER_INFO, {
+      tr_no: trNo,
+      meet,
+    })
+
+    const items = response.response.body.items?.item || []
+    return items.length > 0 ? items[0] : null
+  }
+
+  /**
+   * 전체 조교사 목록 조회
+   */
+  async getAllTrainers(meet?: string): Promise<KRATrainerInfo[]> {
+    const response = await this.request<KRATrainerInfo>(ENDPOINTS.TRAINER_INFO, {
+      meet,
+      numOfRows: 1000,
+    })
+
+    return response.response.body.items?.item || []
+  }
+
+  /**
+   * 조교사명으로 검색
+   */
+  async searchTrainerByName(trName: string, meet?: string): Promise<KRATrainerInfo[]> {
+    const response = await this.request<KRATrainerInfo>(ENDPOINTS.TRAINER_INFO, {
+      tr_name: trName,
+      meet,
+      numOfRows: 100,
+    })
+
+    return response.response.body.items?.item || []
+  }
+
+  // ============================================
+  // 6. 말 정보 API
+  // ============================================
+
+  /**
+   * 말 상세 정보 조회
+   * API: 말정보 및 개체식별 (15105155)
+   */
+  async getHorseDetail(hrNo: string): Promise<KRAHorseDetail | null> {
+    const response = await this.request<KRAHorseDetail>(ENDPOINTS.HORSE_INFO, {
+      hrno: hrNo,
+    })
+
+    const items = response.response.body.items?.item || []
+    return items.length > 0 ? items[0] : null
+  }
+
+  /**
+   * 말 이름으로 검색
+   */
+  async searchHorseByName(hrName: string): Promise<KRAHorseDetail[]> {
+    const response = await this.request<KRAHorseDetail>(ENDPOINTS.HORSE_INFO, {
+      hrname: hrName,
+      numOfRows: 100,
+    })
+
+    return response.response.body.items?.item || []
+  }
+
+  /**
+   * 등록일자 범위로 말 목록 조회
+   */
+  async getHorsesByRegistrationDate(
+    startDate: string,
+    endDate: string
+  ): Promise<KRAHorseDetail[]> {
+    const response = await this.request<KRAHorseDetail>(ENDPOINTS.HORSE_INFO, {
+      reg_dt_fr: startDate,
+      reg_dt_to: endDate,
       numOfRows: 1000,
     })
 
@@ -373,23 +518,35 @@ export class KRAApiClient {
   // ============================================
 
   /**
-   * 날짜를 KRA API 형식으로 변환 (YYYYMMDD)
+   * meet 코드를 rccrs_cd로 변환 (AI API용)
+   */
+  private convertMeetToRccrsCode(meet: string): string {
+    const mapping: Record<string, string> = {
+      '1': '1', // 서울 → 1
+      '2': '3', // 부산경남 → 3
+      '3': '2', // 제주 → 2
+    }
+    return mapping[meet] || meet
+  }
+
+  /**
+   * KRA API 날짜 파싱 (YYYYMMDD → Date)
+   */
+  private parseKRADate(dateStr: string): Date {
+    const year = parseInt(dateStr.substring(0, 4))
+    const month = parseInt(dateStr.substring(4, 6)) - 1
+    const day = parseInt(dateStr.substring(6, 8))
+    return new Date(year, month, day)
+  }
+
+  /**
+   * 날짜를 KRA API 형식으로 변환 (Date → YYYYMMDD)
    */
   static formatDate(date: Date): string {
     const year = date.getFullYear()
     const month = String(date.getMonth() + 1).padStart(2, '0')
     const day = String(date.getDate()).padStart(2, '0')
     return `${year}${month}${day}`
-  }
-
-  /**
-   * KRA API 날짜를 Date 객체로 변환
-   */
-  static parseDate(dateStr: string): Date {
-    const year = parseInt(dateStr.substring(0, 4))
-    const month = parseInt(dateStr.substring(4, 6)) - 1
-    const day = parseInt(dateStr.substring(6, 8))
-    return new Date(year, month, day)
   }
 
   /**
@@ -420,7 +577,7 @@ export class KRAApiClient {
 }
 
 // ============================================
-// 싱글톤 인스턴스 export
+// 싱글톤 인스턴스
 // ============================================
 
 let kraClientInstance: KRAApiClient | null = null
