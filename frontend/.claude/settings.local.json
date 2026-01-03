@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "Bash(npm run build:*)",
+      "Bash(for file in app/api/kra/sync/route.ts app/api/races/[id]/entries/route.ts app/api/analytics/horse/[id]/route.ts app/api/analytics/jockey/[id]/route.ts app/api/analytics/trainer/[id]/route.ts)",
+      "Bash(do head -10 \"$file\")",
+      "Bash(echo:*)",
+      "Bash(done)",
+      "Bash(npx next build)"
+    ]
+  }
+}

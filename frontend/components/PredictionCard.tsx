@@ -57,6 +57,8 @@ export default function PredictionCard({ prediction }: PredictionCardProps) {
   const raceAnalysis = data.race_analysis || ''
   const bettingAdvice = data.betting_advice || {}
   const recommendations = data.recommendations || []
+  const valueBets = data.value_bets || []
+  const avoidBets = data.avoid_bets || []
 
   // 순위 예측 렌더링 (단승)
   const renderRankingPredictions = () => {
@@ -64,54 +66,81 @@ export default function PredictionCard({ prediction }: PredictionCardProps) {
 
     return (
       <div className="space-y-2">
-        <h4 className="text-sm font-medium text-gray-700 mb-2">🏇 순위 예측</h4>
+        <h4 className="text-sm font-medium text-gray-700 mb-2">🏇 순위 예측 (AI 분석 vs 시장)</h4>
         {predictions.slice(0, 5).map((pred: any, idx: number) => {
-          const probability = pred.win_probability || pred.probability || 0
+          const aiProb = pred.ai_probability || pred.win_probability || pred.probability || 0
+          const marketProb = pred.market_probability || (pred.odds ? 1 / pred.odds : 0)
           const expectedValue = pred.expected_value
           const odds = pred.odds
+          const valuation = pred.valuation || (aiProb > marketProb ? '저평가' : aiProb < marketProb ? '고평가' : '적정')
 
           return (
             <div
               key={idx}
-              className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+              className={`p-3 rounded-lg hover:bg-gray-100 transition-colors ${
+                valuation === '저평가' ? 'bg-green-50 border border-green-200' :
+                valuation === '고평가' ? 'bg-red-50 border border-red-200' : 'bg-gray-50'
+              }`}
             >
-              <div className="flex items-center space-x-3">
-                <span
-                  className={`flex items-center justify-center w-8 h-8 rounded-full font-bold text-sm ${
-                    idx === 0
-                      ? 'bg-yellow-400 text-yellow-900'
-                      : idx === 1
-                      ? 'bg-gray-300 text-gray-800'
-                      : idx === 2
-                      ? 'bg-orange-400 text-orange-900'
-                      : 'bg-gray-200 text-gray-700'
-                  }`}
-                >
-                  {pred.predicted_rank || idx + 1}
-                </span>
-                <div>
-                  <div className="font-medium text-gray-900">
-                    {pred.gate_number && `${pred.gate_number}번 `}
-                    {pred.horse_name || `마번 ${pred.horse_number}`}
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center space-x-3">
+                  <span
+                    className={`flex items-center justify-center w-8 h-8 rounded-full font-bold text-sm ${
+                      idx === 0
+                        ? 'bg-yellow-400 text-yellow-900'
+                        : idx === 1
+                        ? 'bg-gray-300 text-gray-800'
+                        : idx === 2
+                        ? 'bg-orange-400 text-orange-900'
+                        : 'bg-gray-200 text-gray-700'
+                    }`}
+                  >
+                    {pred.predicted_rank || idx + 1}
+                  </span>
+                  <div>
+                    <div className="font-medium text-gray-900">
+                      {pred.gate_number && `${pred.gate_number}번 `}
+                      {pred.horse_name || `마번 ${pred.horse_number}`}
+                    </div>
+                    <span className={`text-xs px-2 py-0.5 rounded ${
+                      valuation === '저평가' ? 'bg-green-200 text-green-800' :
+                      valuation === '고평가' ? 'bg-red-200 text-red-800' : 'bg-gray-200 text-gray-700'
+                    }`}>
+                      {valuation} {valuation === '저평가' ? '✅' : valuation === '고평가' ? '❌' : ''}
+                    </span>
                   </div>
-                  {pred.reasoning && (
-                    <div className="text-xs text-gray-500 line-clamp-1">{pred.reasoning}</div>
-                  )}
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="text-sm font-semibold text-blue-600">
-                  {(probability * 100).toFixed(1)}%
                 </div>
                 {odds && (
-                  <div className="text-xs text-gray-500">배당 {odds.toFixed(1)}배</div>
-                )}
-                {expectedValue !== undefined && (
-                  <div className={`text-xs ${getExpectedValueColor(expectedValue)}`}>
-                    기댓값 {expectedValue > 0 ? '+' : ''}{(expectedValue * 100).toFixed(1)}%
+                  <div className="text-right">
+                    <div className="text-lg font-bold text-gray-800">{odds.toFixed(1)}배</div>
                   </div>
                 )}
               </div>
+
+              {/* AI vs 시장 비교 */}
+              <div className="grid grid-cols-3 gap-2 text-center text-xs mt-2 pt-2 border-t border-gray-200">
+                <div>
+                  <div className="text-gray-500">AI 확률</div>
+                  <div className="font-semibold text-blue-600">{(aiProb * 100).toFixed(1)}%</div>
+                </div>
+                <div>
+                  <div className="text-gray-500">시장 확률</div>
+                  <div className="font-semibold text-gray-600">{(marketProb * 100).toFixed(1)}%</div>
+                </div>
+                <div>
+                  <div className="text-gray-500">기댓값</div>
+                  <div className={`font-bold ${getExpectedValueColor(expectedValue || 0)}`}>
+                    {expectedValue !== undefined
+                      ? `${expectedValue > 0 ? '+' : ''}${(expectedValue * 100).toFixed(0)}%`
+                      : '-'
+                    }
+                  </div>
+                </div>
+              </div>
+
+              {pred.reasoning && (
+                <div className="text-xs text-gray-500 mt-2 line-clamp-2">{pred.reasoning}</div>
+              )}
             </div>
           )
         })}
@@ -175,6 +204,53 @@ export default function PredictionCard({ prediction }: PredictionCardProps) {
     )
   }
 
+  // 가치 베팅 & 피해야 할 베팅 렌더링
+  const renderValueAnalysis = () => {
+    if (!valueBets.length && !avoidBets.length) return null
+
+    return (
+      <div className="mt-4 space-y-3">
+        {/* 가치 베팅 */}
+        {valueBets.length > 0 && (
+          <div className="p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border border-green-200">
+            <h4 className="text-sm font-bold text-green-800 mb-2">✅ 가치 베팅 (저평가)</h4>
+            {valueBets.map((bet: any, idx: number) => (
+              <div key={idx} className="flex items-center justify-between text-sm mb-2">
+                <div>
+                  <span className="font-medium text-gray-900">{bet.gate}번 {bet.horse_name}</span>
+                  <span className="text-xs text-gray-500 ml-2">
+                    AI {(bet.ai_probability * 100).toFixed(0)}% vs 시장 {(bet.market_probability * 100).toFixed(0)}%
+                  </span>
+                </div>
+                <div className="text-right">
+                  <span className="font-bold text-green-600">
+                    EV +{(bet.expected_value * 100).toFixed(0)}%
+                  </span>
+                  {bet.recommendation && (
+                    <span className="text-xs ml-2">{bet.recommendation}</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* 피해야 할 베팅 */}
+        {avoidBets.length > 0 && (
+          <div className="p-4 bg-gradient-to-r from-red-50 to-rose-50 rounded-lg border border-red-200">
+            <h4 className="text-sm font-bold text-red-800 mb-2">❌ 피해야 할 베팅 (고평가)</h4>
+            {avoidBets.map((bet: any, idx: number) => (
+              <div key={idx} className="text-sm mb-1">
+                <span className="font-medium text-gray-900">{bet.gate}번 {bet.horse_name}</span>
+                <span className="text-xs text-gray-500 ml-2">- {bet.reason}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   // 베팅 추천 렌더링
   const renderBettingRecommendations = () => {
     if (!recommendations.length && !bettingAdvice.primary_bet) return null
@@ -186,11 +262,16 @@ export default function PredictionCard({ prediction }: PredictionCardProps) {
         {bettingAdvice.primary_bet && (
           <div className="mb-3">
             <div className="text-sm font-medium text-gray-800">
-              메인 베팅: {bettingAdvice.primary_bet}
+              🎯 메인: {bettingAdvice.primary_bet}
             </div>
+            {bettingAdvice.backup_bet && (
+              <div className="text-xs text-gray-600 mt-1">
+                🔄 보조: {bettingAdvice.backup_bet}
+              </div>
+            )}
             {bettingAdvice.backup_bets && bettingAdvice.backup_bets.length > 0 && (
               <div className="text-xs text-gray-600 mt-1">
-                보조: {bettingAdvice.backup_bets.join(', ')}
+                🔄 보조: {bettingAdvice.backup_bets.join(', ')}
               </div>
             )}
           </div>
@@ -216,7 +297,7 @@ export default function PredictionCard({ prediction }: PredictionCardProps) {
             <span className="text-xs text-gray-600">리스크: </span>
             <span
               className={`text-xs font-medium ${
-                bettingAdvice.risk_level === '낮음'
+                bettingAdvice.risk_level === '낮음' || bettingAdvice.risk_level === '낮음'
                   ? 'text-green-600'
                   : bettingAdvice.risk_level === '중간'
                   ? 'text-yellow-600'
@@ -263,6 +344,9 @@ export default function PredictionCard({ prediction }: PredictionCardProps) {
         {['quinella', 'exacta', 'quinella_place', 'trio', 'trifecta'].includes(
           prediction.predictionType
         ) && renderCombinationPredictions()}
+
+        {/* 가치 베팅 분석 (AI vs 시장) */}
+        {renderValueAnalysis()}
 
         {/* 베팅 추천 */}
         {renderBettingRecommendations()}

@@ -6,6 +6,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+
+// Vercel에서 동적 렌더링 강제
+export const dynamic = 'force-dynamic'
 import { prisma } from '@/lib/prisma'
 import { syncRacesByDate, syncAllOddsForDate } from '@/lib/services/kra/sync'
 

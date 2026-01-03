@@ -5,6 +5,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+
+// Vercel에서 동적 렌더링 강제
+export const dynamic = 'force-dynamic'
 import { getPredictionEngine, PredictionOptions } from '@/lib/services/gemini/predictor'
 import { PredictionType } from '@/lib/services/gemini/prompts'
 import { validateRaceContext } from '@/lib/services/context/race-context'
