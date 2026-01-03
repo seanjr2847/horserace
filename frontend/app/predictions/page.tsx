@@ -31,18 +31,14 @@ export default function PredictionsPage() {
       setLoading(true)
       setError(null)
 
-      const params: any = {}
-      if (selectedTrack) {
-        params.trackId = parseInt(selectedTrack)
-      }
+      const races = await racesApi.getTodayRaces()
 
-      const response = await racesApi.getTodayRaces(params)
+      // Filter by track if selected
+      const filteredRaces = selectedTrack
+        ? races.filter(r => r.track_id === parseInt(selectedTrack))
+        : races
 
-      if (response.success) {
-        setTodayRaces(response.races)
-      } else {
-        setError(response.message || '오늘의 경주를 불러올 수 없습니다')
-      }
+      setTodayRaces(filteredRaces)
     } catch (err) {
       setError(err instanceof Error ? err.message : '오류가 발생했습니다')
     } finally {
@@ -50,17 +46,14 @@ export default function PredictionsPage() {
     }
   }
 
-  const racesWithPredictions = todayRaces.filter(
-    (race) => race.predictions && race.predictions.length > 0
-  )
-  const racesWithoutPredictions = todayRaces.filter(
-    (race) => !race.predictions || race.predictions.length === 0
-  )
+  // TODO: Fetch predictions separately for each race
+  const racesWithPredictions: any[] = []
+  const racesWithoutPredictions = todayRaces
 
   if (loading) {
     return (
       <div className="container mx-auto px-4 py-8">
-        <LoadingSpinner message="오늘의 경주를 불러오는 중..." />
+        <LoadingSpinner text="오늘의 경주를 불러오는 중..." />
       </div>
     )
   }
@@ -68,7 +61,7 @@ export default function PredictionsPage() {
   if (error) {
     return (
       <div className="container mx-auto px-4 py-8">
-        <ErrorAlert message={error} onRetry={loadTodayRaces} />
+        <ErrorAlert message={error} />
       </div>
     )
   }
@@ -147,7 +140,7 @@ export default function PredictionsPage() {
 
                     {/* 예측 카드들 */}
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {race.predictions?.map((prediction) => (
+                      {(race as any).predictions?.map((prediction: any) => (
                         <PredictionCard key={prediction.id} prediction={prediction} />
                       ))}
                     </div>

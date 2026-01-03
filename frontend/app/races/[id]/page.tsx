@@ -13,14 +13,14 @@ import EntryTable from '@/components/EntryTable'
 import PredictionCard from '@/components/PredictionCard'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorAlert from '@/components/ErrorAlert'
-import type { RaceDetail, Prediction } from '@/types/race'
+import type { Race } from '@/types/race'
 
 export default function RaceDetailPage() {
   const params = useParams()
   const router = useRouter()
   const raceId = parseInt(params.id as string)
 
-  const [race, setRace] = useState<RaceDetail | null>(null)
+  const [race, setRace] = useState<Race | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [generating, setGenerating] = useState(false)
@@ -35,12 +35,7 @@ export default function RaceDetailPage() {
       setError(null)
 
       const response = await racesApi.getRaceDetail(raceId)
-
-      if (response.success) {
-        setRace(response.race)
-      } else {
-        setError(response.message || '경주 정보를 불러올 수 없습니다')
-      }
+      setRace(response.race)
     } catch (err) {
       setError(err instanceof Error ? err.message : '오류가 발생했습니다')
     } finally {
@@ -48,22 +43,15 @@ export default function RaceDetailPage() {
     }
   }
 
-  const handleGeneratePrediction = async (types: string[]) => {
+  const handleGeneratePrediction = async (types: any[]) => {
     try {
       setGenerating(true)
 
-      const response = await predictionsApi.generatePrediction({
-        raceId,
-        predictionTypes: types,
-      })
+      const response = await predictionsApi.generatePrediction(raceId, types)
 
-      if (response.success) {
-        // 예측 생성 성공 - 데이터 새로고침
-        await loadRaceDetail()
-        alert('예측이 생성되었습니다!')
-      } else {
-        alert(`예측 생성 실패: ${response.message}`)
-      }
+      // 예측 생성 성공 - 데이터 새로고침
+      await loadRaceDetail()
+      alert('예측이 생성되었습니다!')
     } catch (err) {
       alert(err instanceof Error ? err.message : '예측 생성 중 오류가 발생했습니다')
     } finally {
@@ -74,7 +62,7 @@ export default function RaceDetailPage() {
   if (loading) {
     return (
       <div className="container mx-auto px-4 py-8">
-        <LoadingSpinner message="경주 정보를 불러오는 중..." />
+        <LoadingSpinner text="경주 정보를 불러오는 중..." />
       </div>
     )
   }
@@ -82,7 +70,7 @@ export default function RaceDetailPage() {
   if (error || !race) {
     return (
       <div className="container mx-auto px-4 py-8">
-        <ErrorAlert message={error || '경주를 찾을 수 없습니다'} onRetry={loadRaceDetail} />
+        <ErrorAlert message={error || '경주를 찾을 수 없습니다'} />
       </div>
     )
   }
@@ -102,25 +90,25 @@ export default function RaceDetailPage() {
         <div className="flex justify-between items-start mb-4">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              {race.track.name} {race.raceNumber}R
+              {race.track?.name || '경마장'} {race.race_number}R
             </h1>
             <p className="text-gray-600">
-              {new Date(race.raceDate).toLocaleDateString('ko-KR')}
+              {new Date(race.race_date).toLocaleDateString('ko-KR')}
             </p>
           </div>
           <div className="text-right">
             <span
               className={`px-3 py-1 rounded-full text-sm font-medium ${
-                race.raceStatus === 'completed'
+                race.race_status === 'completed'
                   ? 'bg-green-100 text-green-800'
-                  : race.raceStatus === 'in_progress'
+                  : race.race_status === 'in_progress'
                   ? 'bg-yellow-100 text-yellow-800'
                   : 'bg-blue-100 text-blue-800'
               }`}
             >
-              {race.raceStatus === 'completed'
+              {race.race_status === 'completed'
                 ? '완료'
-                : race.raceStatus === 'in_progress'
+                : race.race_status === 'in_progress'
                 ? '진행중'
                 : '예정'}
             </span>
@@ -134,7 +122,7 @@ export default function RaceDetailPage() {
           </div>
           <div>
             <p className="text-sm text-gray-600">주로</p>
-            <p className="text-lg font-semibold">{race.surfaceType}</p>
+            <p className="text-lg font-semibold">{race.surface_type}</p>
           </div>
           <div>
             <p className="text-sm text-gray-600">날씨</p>
@@ -142,22 +130,22 @@ export default function RaceDetailPage() {
           </div>
           <div>
             <p className="text-sm text-gray-600">마장 상태</p>
-            <p className="text-lg font-semibold">{race.trackCondition || '-'}</p>
+            <p className="text-lg font-semibold">{race.track_condition || '-'}</p>
           </div>
         </div>
 
-        {race.prizeMoney && (
+        {race.prize_money && (
           <div className="mt-4 pt-4 border-t">
             <p className="text-sm text-gray-600">상금</p>
             <p className="text-2xl font-bold text-green-600">
-              {parseInt(race.prizeMoney).toLocaleString()}원
+              {race.prize_money?.toLocaleString()}원
             </p>
           </div>
         )}
       </div>
 
       {/* 예측 생성 버튼 */}
-      {race.raceStatus === 'scheduled' && (
+      {race.race_status === 'scheduled' && (
         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
           <h2 className="text-xl font-bold mb-4">AI 예측 생성</h2>
           <div className="flex flex-wrap gap-2">
@@ -213,11 +201,11 @@ export default function RaceDetailPage() {
       )}
 
       {/* 예측 결과 */}
-      {race.predictions && race.predictions.length > 0 && (
+      {(race as any).predictions && (race as any).predictions.length > 0 && (
         <div className="mb-6">
           <h2 className="text-2xl font-bold mb-4">AI 예측 결과</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {race.predictions.map((prediction) => (
+            {(race as any).predictions.map((prediction: any) => (
               <PredictionCard key={prediction.id} prediction={prediction} />
             ))}
           </div>
@@ -227,7 +215,7 @@ export default function RaceDetailPage() {
       {/* 출전 정보 */}
       <div className="bg-white rounded-lg shadow-md p-6">
         <h2 className="text-2xl font-bold mb-4">출전 정보</h2>
-        <EntryTable entries={race.entries} />
+        <EntryTable entries={race.entries || []} />
       </div>
     </div>
   )

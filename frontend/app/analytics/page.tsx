@@ -249,12 +249,12 @@ export default function AnalyticsPage() {
       {/* 로딩 */}
       {loading && (
         <div className="flex justify-center py-12">
-          <LoadingSpinner message="통계를 불러오는 중..." />
+          <LoadingSpinner text="통계를 불러오는 중..." />
         </div>
       )}
 
       {/* 에러 */}
-      {error && <ErrorAlert message={error} onRetry={handleSearch} />}
+      {error && <ErrorAlert message={error} />}
 
       {/* 결과 */}
       {analytics && !loading && (

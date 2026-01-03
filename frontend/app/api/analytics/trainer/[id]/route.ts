@@ -238,10 +238,7 @@ export async function GET(
         overall: {
           totalRaces: trainer.totalRaces,
           totalWins: trainer.totalWins,
-          totalPlaces: trainer.totalPlaces,
-          totalShows: trainer.totalShows,
           winRate: parseFloat(trainer.winRate.toString()),
-          placeRate: parseFloat(trainer.placeRate.toString()),
         },
         byTrack: Object.entries(trackStats).map(([trackId, stats]) => ({
           trackId: parseInt(trackId),

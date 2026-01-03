@@ -198,14 +198,12 @@ export async function GET(
         licenseNumber: jockey.licenseNumber,
         nameKo: jockey.nameKo,
         nameEn: jockey.nameEn,
-        debut: jockey.debut,
+        debutDate: jockey.debutDate,
       },
       statistics: {
         overall: {
           totalRaces: jockey.totalRaces,
           totalWins: jockey.totalWins,
-          totalPlaces: jockey.totalPlaces,
-          totalShows: jockey.totalShows,
           winRate: parseFloat(jockey.winRate.toString()),
           placeRate: parseFloat(jockey.placeRate.toString()),
         },
