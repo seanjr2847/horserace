@@ -1,0 +1,158 @@
+// Prisma Schema for 경마 예측 시스템
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// 경주장 정보
+model RaceTrack {
+  id        Int      @id @default(autoincrement())
+  name      String   @db.VarChar(100)
+  code      Int      @unique
+  location  String   @db.VarChar(100)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  races Race[]
+
+  @@map("race_tracks")
+}
+
+// 경주 정보
+model Race {
+  id             Int       @id @default(autoincrement())
+  raceDate       DateTime  @map("race_date") @db.Date
+  raceNumber     Int       @map("race_number")
+  trackId        Int       @map("track_id")
+  distance       Int // 거리 (미터)
+  surfaceType    String    @map("surface_type") @db.VarChar(50) // 모래, 잔디
+  weather        String?   @db.VarChar(50) // 맑음, 흐림, 비
+  trackCondition String?   @map("track_condition") @db.VarChar(50) // 양호, 불량
+  raceClass      String?   @map("race_class") @db.VarChar(50)
+  prizeMoney     Decimal?  @map("prize_money") @db.Decimal(15, 2)
+  raceStatus     String    @default("scheduled") @map("race_status") @db.VarChar(50) // scheduled, in_progress, completed, cancelled
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  track       RaceTrack     @relation(fields: [trackId], references: [id])
+  entries     RaceEntry[]
+  predictions Prediction[]
+
+  @@unique([raceDate, raceNumber, trackId])
+  @@index([raceDate])
+  @@index([raceStatus])
+  @@map("races")
+}
+
+// 말 정보
+model Horse {
+  id                 Int      @id @default(autoincrement())
+  registrationNumber String   @unique @map("registration_number") @db.VarChar(50)
+  nameKo             String   @map("name_ko") @db.VarChar(100)
+  nameEn             String?  @map("name_en") @db.VarChar(100)
+  birthDate          DateTime @map("birth_date") @db.Date
+  gender             String   @db.VarChar(20) // stallion, mare, gelding
+  rating             Int?
+  totalRaces         Int      @default(0) @map("total_races")
+  totalWins          Int      @default(0) @map("total_wins")
+  totalPlaces        Int      @default(0) @map("total_places")
+  totalShows         Int      @default(0) @map("total_shows")
+  totalEarnings      Decimal  @default(0) @map("total_earnings") @db.Decimal(15, 2)
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  entries RaceEntry[]
+
+  @@index([nameKo])
+  @@map("horses")
+}
+
+// 기수 정보
+model Jockey {
+  id            Int      @id @default(autoincrement())
+  licenseNumber String   @unique @map("license_number") @db.VarChar(50)
+  nameKo        String   @map("name_ko") @db.VarChar(100)
+  nameEn        String?  @map("name_en") @db.VarChar(100)
+  debutDate     DateTime? @map("debut_date") @db.Date
+  totalRaces    Int      @default(0) @map("total_races")
+  totalWins     Int      @default(0) @map("total_wins")
+  winRate       Decimal  @default(0) @map("win_rate") @db.Decimal(5, 4)
+  placeRate     Decimal  @default(0) @map("place_rate") @db.Decimal(5, 4)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  entries RaceEntry[]
+
+  @@index([nameKo])
+  @@map("jockeys")
+}
+
+// 조교사 정보
+model Trainer {
+  id            Int      @id @default(autoincrement())
+  licenseNumber String   @unique @map("license_number") @db.VarChar(50)
+  nameKo        String   @map("name_ko") @db.VarChar(100)
+  nameEn        String?  @map("name_en") @db.VarChar(100)
+  stableName    String?  @map("stable_name") @db.VarChar(100)
+  totalRaces    Int      @default(0) @map("total_races")
+  totalWins     Int      @default(0) @map("total_wins")
+  winRate       Decimal  @default(0) @map("win_rate") @db.Decimal(5, 4)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  entries RaceEntry[]
+
+  @@index([nameKo])
+  @@map("trainers")
+}
+
+// 출전 정보
+model RaceEntry {
+  id             Int      @id @default(autoincrement())
+  raceId         Int      @map("race_id")
+  horseId        Int      @map("horse_id")
+  jockeyId       Int      @map("jockey_id")
+  trainerId      Int      @map("trainer_id")
+  gateNumber     Int      @map("gate_number")
+  horseWeightKg  Decimal? @map("horse_weight_kg") @db.Decimal(5, 2)
+  jockeyWeightKg Decimal? @map("jockey_weight_kg") @db.Decimal(5, 2)
+  odds           Decimal? @db.Decimal(10, 2)
+  finishPosition Int?     @map("finish_position")
+  finishTime     Decimal? @map("finish_time") @db.Decimal(10, 3) // 초 단위
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  race    Race    @relation(fields: [raceId], references: [id])
+  horse   Horse   @relation(fields: [horseId], references: [id])
+  jockey  Jockey  @relation(fields: [jockeyId], references: [id])
+  trainer Trainer @relation(fields: [trainerId], references: [id])
+
+  @@unique([raceId, horseId])
+  @@index([raceId])
+  @@index([horseId])
+  @@map("race_entries")
+}
+
+// 예측 결과
+model Prediction {
+  id              Int      @id @default(autoincrement())
+  raceId          Int      @map("race_id")
+  predictionType  String   @map("prediction_type") @db.VarChar(50) // win, place, quinella, exacta, trifecta
+  predictionData  Json     @map("prediction_data") // JSON 형태의 예측 데이터
+  confidenceScore Decimal  @map("confidence_score") @db.Decimal(5, 4)
+  llmModelVersion String   @map("llm_model_version") @db.VarChar(100)
+  llmReasoning    String?  @map("llm_reasoning") @db.Text
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  race Race @relation(fields: [raceId], references: [id])
+
+  @@index([raceId])
+  @@index([predictionType])
+  @@map("predictions")
+}
