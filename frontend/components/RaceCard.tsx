@@ -32,6 +32,21 @@ export default function RaceCard({ race, onClick }: RaceCardProps) {
     )
   }
 
+  // 날짜 포맷팅 (Invalid Date 방지)
+  const formatDate = (dateValue: string | Date | undefined) => {
+    if (!dateValue) return '-'
+    try {
+      const date = new Date(dateValue)
+      if (isNaN(date.getTime())) return '-'
+      return date.toLocaleDateString('ko-KR')
+    } catch {
+      return '-'
+    }
+  }
+
+  // 출전마 수 계산
+  const entryCount = race.entryCount ?? race.entries?.length ?? 0
+
   return (
     <div
       onClick={onClick}
@@ -40,13 +55,13 @@ export default function RaceCard({ race, onClick }: RaceCardProps) {
       <div className="flex justify-between items-start mb-4">
         <div>
           <h3 className="text-lg font-semibold text-gray-900">
-            {race.race_number}R
+            {race.raceNumber}R
           </h3>
           <p className="text-sm text-gray-500">
-            {new Date(race.race_date).toLocaleDateString('ko-KR')}
+            {formatDate(race.raceDate)}
           </p>
         </div>
-        {getStatusBadge(race.race_status)}
+        {getStatusBadge(race.raceStatus)}
       </div>
 
       <div className="space-y-2 text-sm">
@@ -56,7 +71,7 @@ export default function RaceCard({ race, onClick }: RaceCardProps) {
         </div>
         <div className="flex justify-between">
           <span className="text-gray-600">마장</span>
-          <span className="font-medium">{race.surface_type}</span>
+          <span className="font-medium">{race.surfaceType || '-'}</span>
         </div>
         {race.weather && (
           <div className="flex justify-between">
@@ -64,26 +79,26 @@ export default function RaceCard({ race, onClick }: RaceCardProps) {
             <span className="font-medium">{race.weather}</span>
           </div>
         )}
-        {race.track_condition && (
+        {race.trackCondition && (
           <div className="flex justify-between">
             <span className="text-gray-600">마장 상태</span>
-            <span className="font-medium">{race.track_condition}</span>
+            <span className="font-medium">{race.trackCondition}</span>
           </div>
         )}
-        {race.prize_money && (
+        {race.prizeMoney && (
           <div className="flex justify-between">
             <span className="text-gray-600">상금</span>
             <span className="font-medium text-primary-600">
-              {race.prize_money.toLocaleString()}원
+              {Number(race.prizeMoney).toLocaleString()}원
             </span>
           </div>
         )}
       </div>
 
-      {race.entries && race.entries.length > 0 && (
+      {entryCount > 0 && (
         <div className="mt-4 pt-4 border-t border-gray-200">
           <p className="text-sm text-gray-600">
-            출전마: {race.entries.length}두
+            출전마: {entryCount}두
           </p>
         </div>
       )}

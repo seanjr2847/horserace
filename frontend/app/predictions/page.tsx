@@ -35,7 +35,7 @@ export default function PredictionsPage() {
 
       // Filter by track if selected
       const filteredRaces = selectedTrack
-        ? races.filter(r => r.track_id === parseInt(selectedTrack))
+        ? races.filter(r => r.trackId === parseInt(selectedTrack))
         : races
 
       setTodayRaces(filteredRaces)

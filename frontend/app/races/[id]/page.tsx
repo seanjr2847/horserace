@@ -90,25 +90,25 @@ export default function RaceDetailPage() {
         <div className="flex justify-between items-start mb-4">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              {race.track?.name || '경마장'} {race.race_number}R
+              {race.track?.name || '경마장'} {race.raceNumber}R
             </h1>
             <p className="text-gray-600">
-              {new Date(race.race_date).toLocaleDateString('ko-KR')}
+              {new Date(race.raceDate).toLocaleDateString('ko-KR')}
             </p>
           </div>
           <div className="text-right">
             <span
               className={`px-3 py-1 rounded-full text-sm font-medium ${
-                race.race_status === 'completed'
+                race.raceStatus === 'completed'
                   ? 'bg-green-100 text-green-800'
-                  : race.race_status === 'in_progress'
+                  : race.raceStatus === 'in_progress'
                   ? 'bg-yellow-100 text-yellow-800'
                   : 'bg-blue-100 text-blue-800'
               }`}
             >
-              {race.race_status === 'completed'
+              {race.raceStatus === 'completed'
                 ? '완료'
-                : race.race_status === 'in_progress'
+                : race.raceStatus === 'in_progress'
                 ? '진행중'
                 : '예정'}
             </span>
@@ -122,7 +122,7 @@ export default function RaceDetailPage() {
           </div>
           <div>
             <p className="text-sm text-gray-600">주로</p>
-            <p className="text-lg font-semibold">{race.surface_type}</p>
+            <p className="text-lg font-semibold">{race.surfaceType}</p>
           </div>
           <div>
             <p className="text-sm text-gray-600">날씨</p>
@@ -130,22 +130,22 @@ export default function RaceDetailPage() {
           </div>
           <div>
             <p className="text-sm text-gray-600">마장 상태</p>
-            <p className="text-lg font-semibold">{race.track_condition || '-'}</p>
+            <p className="text-lg font-semibold">{race.trackCondition || '-'}</p>
           </div>
         </div>
 
-        {race.prize_money && (
+        {race.prizeMoney && (
           <div className="mt-4 pt-4 border-t">
             <p className="text-sm text-gray-600">상금</p>
             <p className="text-2xl font-bold text-green-600">
-              {race.prize_money?.toLocaleString()}원
+              {Number(race.prizeMoney).toLocaleString()}원
             </p>
           </div>
         )}
       </div>
 
       {/* 예측 생성 버튼 */}
-      {race.race_status === 'scheduled' && (
+      {race.raceStatus === 'scheduled' && (
         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
           <h2 className="text-xl font-bold mb-4">AI 예측 생성</h2>
           <div className="flex flex-wrap gap-2">

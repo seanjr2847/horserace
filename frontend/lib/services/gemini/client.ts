@@ -73,8 +73,8 @@ export class GeminiClient {
       )
     }
 
-    // GoogleGenerativeAI 인스턴스 생성 (v1beta API 사용)
-    this.genAI = new GoogleGenerativeAI(this.apiKey, { apiVersion: 'v1beta' })
+    // GoogleGenerativeAI 인스턴스 생성
+    this.genAI = new GoogleGenerativeAI(this.apiKey)
 
     // 모델 생성
     this.model = this.genAI.getGenerativeModel({
@@ -187,23 +187,21 @@ export class GeminiClient {
       }
 
       // LLM이 자주 하는 JSON 실수 정리
-      jsonText = jsonText
-        // 싱글쿼트 → 더블쿼트 (속성명과 문자열 값)
-        .replace(/(\s*)'([^']+)'(\s*:)/g, '$1"$2"$3')  // 키: 'key': → "key":
-        .replace(/:\s*'([^']*)'/g, ': "$1"')           // 값: : 'value' → : "value"
-        // trailing comma 제거 (마지막 , 뒤에 } 또는 ])
-        .replace(/,(\s*[}\]])/g, '$1')
-        // 주석 제거
-        .replace(/\/\/[^\n]*/g, '')
-        .replace(/\/\*[\s\S]*?\*\//g, '')
-        // 줄바꿈 문자열 내 이스케이프
-        .replace(/:\s*"([^"]*)\n([^"]*)"/g, ': "$1\\n$2"')
+      jsonText = this.cleanJsonText(jsonText)
 
-      console.log('📝 Cleaned JSON (first 300):', jsonText.substring(0, 300))
+      console.log('📝 Cleaned JSON (first 500):', jsonText.substring(0, 500))
 
-      // JSON 파싱
-      const parsed = JSON.parse(jsonText)
-      return parsed as T
+      // JSON 파싱 시도
+      try {
+        const parsed = JSON.parse(jsonText)
+        return parsed as T
+      } catch (parseError) {
+        // 파싱 실패 시 추가 복구 시도
+        console.warn('⚠️ 1차 파싱 실패, 복구 시도 중...')
+        const repairedJson = this.repairJson(jsonText)
+        const parsed = JSON.parse(repairedJson)
+        return parsed as T
+      }
     } catch (error: any) {
       if (error instanceof SyntaxError) {
         throw new GeminiApiError(
@@ -332,6 +330,87 @@ export class GeminiClient {
       apiKey: this.apiKey.substring(0, 10) + '...',
       description: 'Google Gemini 2.0 Flash - Fast and cost-effective',
     }
+  }
+
+  // ============================================
+  // JSON 정리 헬퍼
+  // ============================================
+
+  private cleanJsonText(text: string): string {
+    // 먼저 문자열 값 내의 줄바꿈을 안전하게 이스케이프
+    // 문자열 내부의 줄바꿈만 찾아서 \\n으로 변환
+    let cleaned = text
+
+    // 문자열 리터럴 내부 처리를 위한 파싱
+    // 문자열 값에서 줄바꿈을 이스케이프 시퀀스로 변환
+    const stringValueRegex = /:\s*"([^"\\]*(?:\\.[^"\\]*)*)"/g
+    cleaned = cleaned.replace(stringValueRegex, (match) => {
+      return match
+        .replace(/\n/g, '\\n')
+        .replace(/\r/g, '\\r')
+        .replace(/\t/g, '\\t')
+    })
+
+    return cleaned
+      // 싱글쿼트 → 더블쿼트 (속성명)
+      .replace(/(\s*)'([^']+)'(\s*:)/g, '$1"$2"$3')
+      // 싱글쿼트 → 더블쿼트 (값)
+      .replace(/:\s*'([^']*)'/g, ': "$1"')
+      // trailing comma 제거
+      .replace(/,(\s*[}\]])/g, '$1')
+      // 주석 제거
+      .replace(/\/\/[^\n]*/g, '')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      // 제어 문자 제거 (줄바꿈, 탭 제외 - 구조용)
+      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '')
+  }
+
+  private repairJson(text: string): string {
+    let repaired = text
+
+    // 불완전한 배열 닫기
+    const openBrackets = (repaired.match(/\[/g) || []).length
+    const closeBrackets = (repaired.match(/\]/g) || []).length
+    if (openBrackets > closeBrackets) {
+      // 마지막 유효 요소 찾기
+      repaired = repaired.replace(/,\s*$/, '') // trailing comma 제거
+      for (let i = 0; i < openBrackets - closeBrackets; i++) {
+        repaired += ']'
+      }
+    }
+
+    // 불완전한 객체 닫기
+    const openBraces = (repaired.match(/\{/g) || []).length
+    const closeBraces = (repaired.match(/\}/g) || []).length
+    if (openBraces > closeBraces) {
+      repaired = repaired.replace(/,\s*$/, '')
+      for (let i = 0; i < openBraces - closeBraces; i++) {
+        repaired += '}'
+      }
+    }
+
+    // 미완성 문자열 닫기 (홀수 개의 따옴표)
+    const quoteCount = (repaired.match(/"/g) || []).length
+    if (quoteCount % 2 !== 0) {
+      // 마지막 따옴표 찾아서 문자열 닫기
+      const lastQuoteIndex = repaired.lastIndexOf('"')
+      const afterLastQuote = repaired.substring(lastQuoteIndex + 1)
+
+      // 닫히지 않은 문자열이면 닫기
+      if (!afterLastQuote.includes('"')) {
+        repaired = repaired + '"'
+      }
+    }
+
+    // 중복 쉼표 제거
+    repaired = repaired.replace(/,\s*,/g, ',')
+
+    // 빈 값 처리
+    repaired = repaired.replace(/:\s*,/g, ': null,')
+    repaired = repaired.replace(/:\s*}/g, ': null}')
+    repaired = repaired.replace(/:\s*]/g, ': null]')
+
+    return repaired
   }
 }
 

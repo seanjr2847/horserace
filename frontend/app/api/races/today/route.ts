@@ -93,7 +93,7 @@ export async function GET(request: NextRequest) {
         console.log('KRA 동기화 결과:', syncResult.message)
         lastSyncDate = todayStr
 
-        if (syncResult.success && syncResult.syncedRaces > 0) {
+        if (syncResult.success && (syncResult.stats?.racesCreated ?? 0) > 0) {
           // 동기화 후 다시 조회
           races = await prisma.race.findMany({
             where,
