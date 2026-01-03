@@ -60,13 +60,13 @@ export default function AnalyticsPage() {
 
       switch (type) {
         case 'horse':
-          response = await analyticsApi.getHorseAnalytics(id)
+          response = await analyticsApi.getHorseStats(id)
           break
         case 'jockey':
-          response = await analyticsApi.getJockeyAnalytics(id)
+          response = await analyticsApi.getJockeyStats(id)
           break
         case 'trainer':
-          response = await analyticsApi.getTrainerAnalytics(id)
+          response = await analyticsApi.getTrainerStats(id)
           break
       }
 

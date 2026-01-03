@@ -4,49 +4,123 @@
 
 ## 📋 목차
 
-1. [KRA API 키 발급](#kra-api-키-발급)
-2. [API 연결 테스트](#api-연결-테스트)
-3. [데이터 동기화](#데이터-동기화)
-4. [API 사용 예시](#api-사용-예시)
-5. [문제 해결](#문제-해결)
+1. [필수 API 목록](#-필수-api-목록)
+2. [API 키 발급](#-api-키-발급)
+3. [API 연결 테스트](#-api-연결-테스트)
+4. [API 사용 예시](#-api-사용-예시)
+5. [문제 해결](#-문제-해결)
 
-## 🔑 KRA API 키 발급
+---
 
-### 1단계: 공공데이터포털 회원가입
+## 🎯 필수 API 목록
+
+프로젝트에 필요한 **6개 API**를 모두 신청해야 합니다.
+
+### 1. RC경마경주정보 (15063950) ⭐ 최우선
+- **링크**: https://www.data.go.kr/data/15063950/openapi.do
+- **엔드포인트**: `https://apis.data.go.kr/B551015/API186_1/SeoulRace_1`
+- **용도**: 경주 일정, 출전마, 기수, 조교사 정보 (가장 포괄적)
+- **파라미터**:
+  - `ServiceKey`: API 인증키 (필수)
+  - `rc_date_fr`: 시작일자 YYYYMMDD (필수)
+  - `rc_date_to`: 종료일자 YYYYMMDD (필수)
+  - `meet`: 경마장 코드 (1: 서울, 2: 제주, 3: 부산경남)
+  - `_type`: 응답 형식 (json/xml)
+
+### 2. 출전표정보 (15058677)
+- **링크**: https://www.data.go.kr/data/15058677/openapi.do
+- **엔드포인트**: `https://apis.data.go.kr/B551015/API26_2/entrySheet_2`
+- **용도**: 출전 예정 경주마 상세 정보 (40+ 필드)
+- **파라미터**:
+  - `ServiceKey`: API 인증키 (필수)
+  - `rc_date`: 경주일자 YYYYMMDD
+  - `rc_month`: 경주월 YYYYMM
+  - `rc_no`: 경주번호
+  - `meet`: 경마장 코드
+
+### 3. AI학습용_경주결과 (15143803)
+- **링크**: https://www.data.go.kr/data/15143803/openapi.do
+- **엔드포인트**: `https://apis.data.go.kr/B551015/API155/raceResult`
+- **용도**: 과거 경주 결과 (예측 학습용)
+- **파라미터**:
+  - `ServiceKey`: API 인증키 (필수)
+  - `race_dt`: 경주일자 YYYYMMDD (필수)
+  - `rccrs_cd`: 경마장 코드 (필수: 1=서울, 2=제주, 3=부산경남)
+  - `_type`: 응답 형식 (json/xml)
+
+### 4. 확정배당율 통합 정보 (15058559)
+- **링크**: https://www.data.go.kr/data/15058559/openapi.do
+- **엔드포인트**: `https://apis.data.go.kr/B551015/API160_1/integratedInfo_1`
+- **용도**: 모든 승식별 확정 배당률
+- **파라미터**:
+  - `ServiceKey`: API 인증키 (필수)
+  - `rc_date`: 경주일자 YYYYMMDD
+  - `rc_no`: 경주번호
+  - `meet`: 경마장 코드
+  - `pool`: 승식 (WIN=단승, PLC=복승, QNL=복연승, EXA=쌍승, TRI=삼복승)
+
+### 5. 조교사정보_영문추가 (15130588)
+- **링크**: https://www.data.go.kr/data/15130588/openapi.do
+- **엔드포인트**: `https://apis.data.go.kr/B551015/API308/trainerInfo`
+- **용도**: 조교사 상세 정보 및 통계
+- **파라미터**:
+  - `ServiceKey`: API 인증키 (필수)
+  - `tr_no`: 조교사번호
+  - `tr_name`: 조교사명
+  - `meet`: 경마장 코드
+
+### 6. 말정보 및 개체식별 (15105155)
+- **링크**: https://www.data.go.kr/data/15105155/openapi.do
+- **엔드포인트**: `https://apis.data.go.kr/B551015/horseinfohi/gethorseinfohi`
+- **용도**: 말 상세 정보 및 개체 식별
+- **파라미터**:
+  - `ServiceKey`: API 인증키 (필수)
+  - `hrno`: 말 등록번호
+  - `hrname`: 말 이름
+  - `reg_dt_fr`: 등록시작일자 YYYYMMDD
+  - `reg_dt_to`: 등록종료일자 YYYYMMDD
+
+---
+
+## 🔑 API 키 발급
+
+### 1단계: 공공데이터포털 회원가입 (3분)
 
 1. [공공데이터포털](https://www.data.go.kr) 접속
-2. 우측 상단 "회원가입" 클릭
-3. 회원 정보 입력 및 가입 완료
+2. 우측 상단 **"회원가입"** 클릭
+3. 개인 회원 가입 (이메일 인증)
 
-### 2단계: API 신청
+### 2단계: 6개 API 신청 (5분)
 
-1. 로그인 후 검색창에 **"한국마사회"** 검색
-2. 다음 API들을 활용신청:
-   - 경마 경주정보 조회 서비스
-   - 경마 출전정보 조회 서비스
-   - 경마 경주결과 조회 서비스
-   - 기수/조교사 정보 조회 서비스
+**중요: 위 6개 API를 모두 신청해야 합니다!**
 
-3. 각 API의 "활용신청" 버튼 클릭
-4. 활용 목적 작성 (예: "경마 데이터 분석 및 예측 시스템 개발")
-5. 신청 완료
+각 API 링크를 클릭하여 활용신청:
 
-### 3단계: API 키 확인
+1. **로그인 필수** (안 하면 버튼 안 보임)
+2. 각 API 상세 페이지에서 **"활용신청"** 버튼 클릭
+3. **개발계정** 선택 (일 10,000 요청)
+4. 활용 목적: `경마 예측 시스템 개발` (자유롭게 작성)
+5. **즉시 자동승인** (심사 없음)
 
-1. 상단 메뉴에서 "마이페이지" → "오픈API" 클릭
-2. "일반 인증키(Encoding)" 복사
-3. `.env.local` 파일의 `KRA_API_KEY`에 붙여넣기
+### 3단계: API 키 확인 및 설정 (1분)
+
+1. **마이페이지 → 오픈API → 개발계정 상세** 클릭
+2. **일반 인증키(Encoding)** 복사
+3. `.env.local` 파일에 붙여넣기:
 
 ```bash
-KRA_API_KEY="발급받은_API_키를_여기에_붙여넣기"
+KRA_API_KEY="복사한_API_키를_여기에_붙여넣기"
 ```
+
+**주의**: `your_kra_api_key_here`를 실제 키로 교체하세요!
 
 ### API 사용 제한
 
 - **개발 계정**: 일 10,000 요청 (즉시 승인)
-- **운영 계정**: 일 100,000 요청 (검토 후 승인)
-- **트래픽 제한**: 없음
-- **상업적 이용**: 가능 (데이터 재판매는 불가)
+- **운영 계정**: 일 100,000 요청 (활용사례 등록 필요)
+- **무료 사용**: 상업적 이용 가능 (재판매 불가)
+
+---
 
 ## 🔗 API 연결 테스트
 
@@ -57,38 +131,53 @@ KRA_API_KEY="발급받은_API_키를_여기에_붙여넣기"
 cat .env.local | grep KRA_API_KEY
 ```
 
-API 키가 `your_kra_api_key_here`로 되어 있으면 실제 키로 변경해야 합니다.
+API 키가 `your_kra_api_key_here`로 되어 있으면 **실제 키로 교체 필수**!
 
-### 2. HTTP 테스트 (curl)
+### 2. curl로 테스트 (추천)
 
 ```bash
-curl http://localhost:3000/api/kra/sync?action=test_connection
+# 오늘 날짜의 경주 조회 테스트
+curl "https://apis.data.go.kr/B551015/API186_1/SeoulRace_1?ServiceKey=YOUR_API_KEY&rc_date_fr=20240104&rc_date_to=20240104&_type=json"
 ```
+
+**YOUR_API_KEY**를 실제 키로 교체하세요.
 
 **성공 응답:**
 ```json
 {
-  "success": true,
-  "message": "KRA API 연결 성공"
+  "response": {
+    "header": {
+      "resultCode": "00",
+      "resultMsg": "NORMAL_CODE"
+    },
+    "body": {
+      "items": { ... }
+    }
+  }
 }
 ```
 
-**실패 응답:**
-```json
-{
-  "success": false,
-  "message": "KRA API 연결 실패"
-}
+**실패 응답 (401 Unauthorized):**
+- API 키가 없거나 잘못됨
+- 해결: API 키 재확인 및 교체
+
+**실패 응답 (resultCode: "03"):**
+- 데이터 없음 (해당 날짜에 경주 없음)
+- 해결: 다른 날짜로 시도
+
+### 3. Next.js 서버에서 테스트
+
+개발 서버 실행:
+```bash
+npm run dev
 ```
 
-### 3. 브라우저 테스트
-
-개발 서버 실행 후 브라우저에서 접속:
+브라우저에서 접속:
 ```
-http://localhost:3000/api/kra/sync?action=test_connection
+http://localhost:4000/api/kra/sync?action=test_connection
 ```
 
-### 4. 프로그래밍 방식 테스트 (TypeScript)
+### 4. TypeScript 코드로 테스트
 
 ```typescript
 import { getKRAClient } from '@/lib/services/kra/client'
@@ -103,376 +192,192 @@ if (isConnected) {
 }
 ```
 
-## 🔄 데이터 동기화
+---
 
-### 1. 경주장 정보 초기화 (최초 1회)
+## 💻 API 사용 예시
 
-```bash
-curl -X POST http://localhost:3000/api/kra/sync \
-  -H "Content-Type: application/json" \
-  -d '{"action": "sync_tracks"}'
-```
-
-이 작업은 다음 경주장 정보를 데이터베이스에 생성합니다:
-- 서울 (코드: 1)
-- 부산경남 (코드: 2)
-- 제주 (코드: 3)
-
-### 2. 오늘 경주 동기화
-
-```bash
-curl -X POST http://localhost:3000/api/kra/sync \
-  -H "Content-Type: application/json" \
-  -d '{"action": "sync_today"}'
-```
-
-**응답 예시:**
-```json
-{
-  "success": true,
-  "message": "20260103 동기화 완료: 경주 12개, 출전마 144개",
-  "stats": {
-    "racesCreated": 12,
-    "horsesCreated": 87,
-    "jockeysCreated": 15,
-    "trainersCreated": 23,
-    "entriesCreated": 144,
-    "errors": 0
-  }
-}
-```
-
-### 3. 특정 날짜 동기화
-
-```bash
-curl -X POST http://localhost:3000/api/kra/sync \
-  -H "Content-Type: application/json" \
-  -d '{
-    "action": "sync_date",
-    "date": "2026-01-03"
-  }'
-```
-
-### 4. 날짜 범위 동기화 (역사적 데이터)
-
-```bash
-# 2024년 1월 전체 동기화
-curl -X POST http://localhost:3000/api/kra/sync \
-  -H "Content-Type: application/json" \
-  -d '{
-    "action": "sync_date_range",
-    "startDate": "2024-01-01",
-    "endDate": "2024-01-31"
-  }'
-```
-
-⚠️ **주의**: 큰 범위 동기화는 시간이 오래 걸립니다.
-- 1일: ~10초
-- 1주일: ~1분
-- 1개월: ~5분
-- 1년: ~1시간
-
-### 5. 최근 7일 동기화
-
-```bash
-curl -X POST http://localhost:3000/api/kra/sync \
-  -H "Content-Type: application/json" \
-  -d '{"action": "sync_recent"}'
-```
-
-### 6. 경주 결과 업데이트
-
-경주가 완료된 후 결과를 업데이트:
-
-```bash
-curl -X POST http://localhost:3000/api/kra/sync \
-  -H "Content-Type: application/json" \
-  -d '{
-    "action": "update_results",
-    "rcDate": "20260103",
-    "rcNo": 1,
-    "meet": "1"
-  }'
-```
-
-파라미터:
-- `rcDate`: 경주 날짜 (YYYYMMDD)
-- `rcNo`: 경주 번호 (1부터 시작)
-- `meet`: 경주장 코드 (1: 서울, 2: 부산경남, 3: 제주)
-
-## 📝 API 사용 예시
-
-### TypeScript/JavaScript에서 사용
-
-#### 1. KRA 클라이언트 직접 사용
+### 예시 1: 오늘 경주 목록 조회
 
 ```typescript
-import { getKRAClient, KRAApiClient } from '@/lib/services/kra/client'
+import { getKRAClient } from '@/lib/services/kra/client'
+import { KRAApiClient } from '@/lib/services/kra/client'
 
-// 클라이언트 가져오기
-const kraClient = getKRAClient()
+const client = getKRAClient()
+const today = KRAApiClient.formatDate(new Date()) // '20240104'
 
-// 오늘 경주 조회
-const today = KRAApiClient.formatDate(new Date())
-const races = await kraClient.getRacesByDate(today)
+// 오늘 서울 경마장 경주 조회
+const races = await client.getRacesByDate(today, '1')
+console.log(`오늘 경주 수: ${races.length}`)
+```
 
-console.log(`오늘 경주 ${races.length}개:`)
-races.forEach(race => {
-  console.log(`- ${race.rcNo}R: ${race.rcName} (${race.rcDist}m)`)
+### 예시 2: 특정 경주 출전마 조회
+
+```typescript
+const client = getKRAClient()
+
+// 2024년 1월 4일, 서울 경마장, 1번 경주
+const entries = await client.getHorseEntries('20240104', 1, '1')
+
+entries.forEach((entry) => {
+  console.log(`
+    말: ${entry.hrName}
+    기수: ${entry.jkName}
+    조교사: ${entry.trName}
+    게이트: ${entry.ordNo}번
+  `)
 })
+```
 
-// 특정 경주의 출전마 조회
-const entries = await kraClient.getHorseEntries(today, 1, '1')
-console.log(`\n1R 출전마 ${entries.length}마:`)
-entries.forEach(entry => {
-  console.log(`- ${entry.hrNo}번 ${entry.hrName} (${entry.jkName} 기수)`)
+### 예시 3: 경주 결과 조회
+
+```typescript
+const client = getKRAClient()
+
+// 과거 경주 결과 조회
+const results = await client.getRaceResults('20231220', 5, '1')
+
+results.forEach((result) => {
+  console.log(`
+    ${result.ord}위: ${result.hrName}
+    기수: ${result.jkName}
+    주파시간: ${result.rcTime}
+  `)
 })
+```
+
+### 예시 4: 배당률 조회
+
+```typescript
+const client = getKRAClient()
+
+// 단승식 배당률 조회
+const winOdds = await client.getOdds('20240104', 1, '1', 'WIN')
+
+// 복연승 배당률 조회
+const quinellaOdds = await client.getQuinellaOdds('20240104', 1, '1')
+
+// 삼복승 배당률 조회
+const trifectaOdds = await client.getTrifectaOdds('20240104', 1, '1')
+```
+
+### 예시 5: 조교사 정보 조회
+
+```typescript
+const client = getKRAClient()
+
+// 특정 조교사 정보 조회
+const trainer = await client.getTrainerInfo('12345', '1')
+
+if (trainer) {
+  console.log(`
+    조교사: ${trainer.trName}
+    영문명: ${trainer.trNameEn}
+    마방: ${trainer.stable}
+    총 경주: ${trainer.totRcCnt}회
+    승수: ${trainer.totWinCnt}승
+    승률: ${(trainer.winRate * 100).toFixed(1)}%
+  `)
+}
+
+// 전체 조교사 목록 조회
+const allTrainers = await client.getAllTrainers('1')
+```
+
+### 예시 6: 말 정보 조회
+
+```typescript
+const client = getKRAClient()
 
 // 말 상세 정보 조회
-const horseDetail = await kraClient.getHorseDetail(entries[0].hrRegNo)
-if (horseDetail) {
-  console.log(`\n${horseDetail.hrName} 상세:`)
-  console.log(`- 생년월일: ${horseDetail.birthDate}`)
-  console.log(`- 출주: ${horseDetail.totRcCnt}회`)
-  console.log(`- 1착: ${horseDetail.totWinCnt}회`)
-  console.log(`- 총 상금: ${horseDetail.totPrize}원`)
+const horse = await client.getHorseDetail('HR123456')
+
+if (horse) {
+  console.log(`
+    말: ${horse.hrName} (${horse.hrNameEn})
+    생년월일: ${horse.birthDate}
+    성별: ${horse.sex}
+    레이팅: ${horse.rating}
+    부: ${horse.faName}
+    모: ${horse.moName}
+    총 경주: ${horse.totRcCnt}회
+    승수: ${horse.totWinCnt}승
+    총 상금: ${horse.totPrize.toLocaleString()}원
+  `)
 }
+
+// 말 이름으로 검색
+const horses = await client.searchHorseByName('질주')
 ```
 
-#### 2. 동기화 함수 사용
+---
 
-```typescript
-import { syncRacesByDate, syncRacesByDateRange } from '@/lib/services/kra/sync'
+## 🔧 문제 해결
 
-// 오늘 경주 동기화
-const result = await syncRacesByDate(new Date())
-console.log(result.message)
-console.log(`경주: ${result.stats.racesCreated}개`)
-console.log(`출전: ${result.stats.entriesCreated}개`)
+### 문제 1: "KRA API 키가 설정되지 않았습니다"
 
-// 최근 30일 동기화
-const thirtyDaysAgo = new Date()
-thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
-const rangeResult = await syncRacesByDateRange(thirtyDaysAgo, new Date())
-console.log(`30일간 총 ${rangeResult.stats.racesCreated}개 경주 동기화`)
-```
+**원인**: `.env.local` 파일에 API 키가 없거나 잘못됨
 
-#### 3. Next.js API Route에서 사용
-
-```typescript
-// app/api/my-endpoint/route.ts
-import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
-import { syncRacesByDate } from '@/lib/services/kra/sync'
-
-export async function POST() {
-  // 오늘 경주 동기화
-  await syncRacesByDate(new Date())
-
-  // 데이터베이스에서 조회
-  const races = await prisma.race.findMany({
-    where: {
-      raceDate: new Date(),
-    },
-    include: {
-      track: true,
-      entries: {
-        include: {
-          horse: true,
-          jockey: true,
-          trainer: true,
-        },
-      },
-    },
-  })
-
-  return NextResponse.json({ races })
-}
-```
-
-### React 컴포넌트에서 사용
-
-```typescript
-'use client'
-
-import { useState } from 'react'
-import { Button } from '@/components/ui/Button'
-
-export function SyncButton() {
-  const [loading, setLoading] = useState(false)
-  const [message, setMessage] = useState('')
-
-  const handleSync = async () => {
-    setLoading(true)
-    setMessage('')
-
-    try {
-      const response = await fetch('/api/kra/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'sync_today' }),
-      })
-
-      const result = await response.json()
-
-      if (result.success) {
-        setMessage(`✅ ${result.message}`)
-      } else {
-        setMessage(`❌ ${result.message}`)
-      }
-    } catch (error) {
-      setMessage(`❌ 동기화 실패: ${error}`)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  return (
-    <div>
-      <Button onClick={handleSync} disabled={loading}>
-        {loading ? '동기화 중...' : '오늘 경주 동기화'}
-      </Button>
-      {message && <p className="mt-2">{message}</p>}
-    </div>
-  )
-}
-```
-
-## 🛠️ 문제 해결
-
-### 1. "KRA API 키가 설정되지 않았습니다"
-
-**원인**: 환경 변수가 설정되지 않음
-
-**해결책**:
+**해결**:
 1. `.env.local` 파일 확인
-2. `KRA_API_KEY="실제_키"` 형식으로 설정
-3. 개발 서버 재시작 (`npm run dev` 종료 후 재실행)
+2. `KRA_API_KEY="실제_API_키"` 형식으로 작성
+3. 개발 서버 재시작 (`Ctrl+C` → `npm run dev`)
 
-### 2. "KRA API 에러: Unauthorized"
+### 문제 2: "401 Unauthorized" 에러
 
-**원인**: API 키가 잘못되었거나 활용신청이 승인되지 않음
+**원인**: API 키가 유효하지 않음
 
-**해결책**:
-1. 공공데이터포털 로그인
-2. 마이페이지 → 오픈API에서 키 확인
-3. 활용신청 상태 확인 (승인 대기/승인/거부)
+**해결**:
+1. 공공데이터포털에서 API 키 재확인
+2. **일반 인증키(Encoding)** 사용 (Decoding 키 아님!)
+3. 복사할 때 공백 없이 정확히 복사
 
-### 3. API 호출 시 타임아웃
+### 문제 3: "resultCode: 03" - 데이터 없음
 
-**원인**: KRA API 서버 응답 지연 또는 네트워크 문제
+**원인**: 해당 날짜/경주에 데이터가 없음
 
-**해결책**:
-- 자동 재시도 로직이 작동하므로 잠시 대기
-- 지속적으로 실패 시 KRA API 서버 상태 확인
-- 공공데이터포털 공지사항 확인
+**해결**:
+1. 다른 날짜로 시도 (경주가 있는 날짜)
+2. 경마 일정 확인: https://race.kra.co.kr
+3. 주말 또는 공휴일에 경주가 많음
 
-### 4. "no results found" 또는 빈 배열 반환
+### 문제 4: "Network Error" 또는 타임아웃
 
-**원인**: 해당 날짜에 경주가 없거나 데이터가 아직 제공되지 않음
+**원인**: 네트워크 연결 문제 또는 API 서버 일시 장애
 
-**해결책**:
-- 경주가 있는 날짜인지 확인 (주로 주말)
-- 과거 데이터만 확실하게 제공되므로 최근 데이터는 확인 필요
-- [한국마사회 홈페이지](https://race.kra.co.kr)에서 경주 일정 확인
+**해결**:
+1. 인터넷 연결 확인
+2. 5-10초 후 재시도 (자동 재시도 기능 있음)
+3. 공공데이터포털 서버 상태 확인
 
-### 5. Rate Limit 초과
+### 문제 5: 특정 API만 동작 안 함
 
-**원인**: 일일 요청 한도 초과
+**원인**: 해당 API를 신청하지 않음
 
-**해결책**:
-- 개발 계정: 일 10,000 요청
-- 필요시 운영 계정으로 업그레이드 신청
-- 캐싱 활용하여 중복 요청 방지
-
-### 6. 동기화 중 일부 실패
-
-**원인**: 특정 경주나 말의 데이터 형식 불일치
-
-**해결책**:
-- 에러 로그 확인하여 어떤 데이터가 실패했는지 파악
-- 해당 경주는 수동으로 다시 시도
-- 로그 예시:
-  ```
-  ⚠️ 출전마 질주왕 동기화 실패: Invalid date format
-  ```
-
-## 📊 데이터 구조
-
-### KRA API → Prisma Database 매핑
-
-| KRA API | 설명 | Prisma 모델 | 필드 |
-|---------|------|------------|------|
-| 경주정보 | 경주 메타데이터 | Race | raceDate, raceNumber, distance 등 |
-| 출전정보 | 출전마 목록 | RaceEntry | gateNumber, odds, finishPosition 등 |
-| 말정보 | 말 상세 정보 | Horse | registrationNumber, nameKo, totalWins 등 |
-| 기수정보 | 기수 통계 | Jockey | licenseNumber, nameKo, winRate 등 |
-| 조교사정보 | 조교사 통계 | Trainer | licenseNumber, nameKo, winRate 등 |
-| 경주결과 | 착순 및 시간 | RaceEntry | finishPosition, finishTime |
-
-## 🔄 자동 동기화 설정 (선택사항)
-
-### Cron Job 설정 (Linux/Mac)
-
-```bash
-# crontab -e
-
-# 매일 오전 6시에 어제 경주 결과 동기화
-0 6 * * * curl -X POST http://localhost:3000/api/kra/sync -H "Content-Type: application/json" -d '{"action":"sync_recent"}'
-```
-
-### Windows 작업 스케줄러
-
-1. 작업 스케줄러 열기
-2. "기본 작업 만들기"
-3. 트리거: 매일 오전 6시
-4. 작업: PowerShell 스크립트 실행
-5. 스크립트 내용:
-   ```powershell
-   Invoke-RestMethod -Uri "http://localhost:3000/api/kra/sync" `
-     -Method POST `
-     -ContentType "application/json" `
-     -Body '{"action":"sync_recent"}'
-   ```
-
-### Node.js Cron (애플리케이션 내)
-
-```typescript
-// app/api/cron/sync/route.ts
-import { NextResponse } from 'next/server'
-import { syncRacesByDate } from '@/lib/services/kra/sync'
-
-export async function GET(request: Request) {
-  // Vercel Cron에서 호출
-  const authHeader = request.headers.get('authorization')
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
-  const yesterday = new Date()
-  yesterday.setDate(yesterday.getDate() - 1)
-
-  await syncRacesByDate(yesterday)
-
-  return NextResponse.json({ success: true })
-}
-```
+**해결**:
+1. 공공데이터포털 → 마이페이지 → 오픈API 확인
+2. 6개 API가 모두 승인되었는지 확인
+3. 누락된 API 활용신청
 
 ---
 
 ## 📚 추가 리소스
 
-- [공공데이터포털](https://www.data.go.kr)
-- [한국마사회 공식 홈페이지](https://race.kra.co.kr)
-- [KRA 국제부 문의](mailto:inter@kra.co.kr) - +82-2-509-2991~5
+- **공공데이터포털**: https://www.data.go.kr
+- **한국마사회 공식**: https://www.kra.co.kr
+- **경주 일정**: https://race.kra.co.kr
+- **문의**: KRA 공공데이터 담당 (inter@kra.co.kr)
 
-## 💡 팁
+---
 
-1. **초기 설정 시**: 먼저 최근 1-2주 데이터만 동기화하여 테스트
-2. **대량 동기화**: 야간 시간대에 진행하여 API 부하 분산
-3. **데이터 검증**: Prisma Studio로 동기화된 데이터 확인
-4. **에러 모니터링**: 콘솔 로그를 파일로 저장하여 추적
+## ✅ 체크리스트
 
-```bash
-npm run dev 2>&1 | tee sync.log
-```
+개발 시작 전 확인:
+
+- [ ] 공공데이터포털 회원가입 완료
+- [ ] 6개 API 모두 활용신청 완료
+- [ ] API 키 발급 및 `.env.local`에 설정
+- [ ] `npm run dev` 서버 실행
+- [ ] API 연결 테스트 성공
+- [ ] Gemini API 키도 설정 완료 (예측 기능용)
+
+모두 체크되면 개발 시작 가능! 🚀
