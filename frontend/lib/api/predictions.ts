@@ -14,8 +14,8 @@ export const predictionsApi = {
     const response = await apiClient.post<PredictionResponse>(
       '/predictions/generate',
       {
-        race_id: raceId,
-        prediction_types: predictionTypes,
+        raceId: raceId,
+        predictionTypes: predictionTypes,
       }
     )
     return response.data

@@ -4,7 +4,7 @@
  */
 
 import { getGeminiClient, GeminiApiError } from './client'
-import { getPredictionPrompt, PredictionType, PREDICTION_TYPE_INFO } from './prompts'
+import { getPredictionPrompt, getValidationPrompt, PredictionType, PREDICTION_TYPE_INFO } from './prompts'
 import { buildRaceContext, buildCompactRaceContext, getContextStats } from '../context/race-context'
 import { prisma } from '@/lib/prisma'
 
@@ -37,6 +37,20 @@ export interface PredictionOptions {
   saveToDatabase?: boolean // DB에 자동 저장
   temperature?: number // LLM temperature
   maxRetries?: number // 실패 시 재시도 횟수
+  enableValidation?: boolean // LLM 검증 활성화
+}
+
+// ============================================
+// LLM 검증 결과 타입
+// ============================================
+
+export interface ValidationResult {
+  is_valid: boolean
+  confidence_adjustment: number
+  issues_found: string[]
+  improvements: string[]
+  revised_ranking?: number[]
+  revised_reasoning?: string
 }
 
 // ============================================
@@ -64,6 +78,7 @@ export class RacePredictionEngine {
       saveToDatabase = true,
       temperature = 0.7,
       maxRetries = 2,
+      enableValidation = true, // 기본값: 검증 활성화
     } = options
 
     const startTime = Date.now()
@@ -114,10 +129,19 @@ export class RacePredictionEngine {
       }
 
       // 4. 신뢰도 점수 추출
-      const confidenceScore = this.extractConfidence(predictionData)
+      let confidenceScore = this.extractConfidence(predictionData)
 
       // 5. 추론 과정 추출
       const reasoning = this.extractReasoning(predictionData)
+
+      // 5.5. LLM 검증 (활성화된 경우)
+      let finalPredictionData = predictionData
+      if (enableValidation) {
+        const validation = await this.validateWithLLM(predictionData, context)
+        const validated = this.applyValidation(predictionData, confidenceScore, validation)
+        finalPredictionData = validated.predictionData
+        confidenceScore = validated.confidenceScore
+      }
 
       const processingTime = Date.now() - startTime
       console.log(
@@ -132,7 +156,7 @@ export class RacePredictionEngine {
           data: {
             raceId,
             predictionType: type,
-            predictionData: predictionData as any,
+            predictionData: finalPredictionData as any,
             confidenceScore: confidenceScore.toString(),
             llmModelVersion: this.geminiClient.getModelInfo().name,
             llmReasoning: reasoning,
@@ -159,7 +183,7 @@ export class RacePredictionEngine {
           id: 0,
           raceId,
           predictionType: type,
-          predictionData,
+          predictionData: finalPredictionData,
           confidenceScore,
           llmModelVersion: this.geminiClient.getModelInfo().name,
           llmReasoning: reasoning,
@@ -305,8 +329,94 @@ export class RacePredictionEngine {
   }
 
   // ============================================
-  // 예측 검증
+  // LLM 기반 예측 검증
   // ============================================
+
+  async validateWithLLM(
+    predictionData: any,
+    raceContext: string
+  ): Promise<ValidationResult> {
+    console.log('   🔍 LLM 검증 시작...')
+
+    try {
+      const validationPrompt = getValidationPrompt(predictionData, raceContext)
+
+      const validationResult = await this.geminiClient.generateJSON(validationPrompt, {
+        temperature: 0.3, // 검증은 더 보수적으로
+        maxOutputTokens: 4096,
+      })
+
+      console.log(
+        `   ${validationResult.is_valid ? '✅' : '⚠️'} 검증 완료: ${validationResult.issues_found?.length || 0}개 이슈 발견`
+      )
+
+      return {
+        is_valid: validationResult.is_valid ?? true,
+        confidence_adjustment: validationResult.confidence_adjustment ?? 0,
+        issues_found: validationResult.issues_found ?? [],
+        improvements: validationResult.improvements ?? [],
+        revised_ranking: validationResult.revised_ranking,
+        revised_reasoning: validationResult.revised_reasoning,
+      }
+    } catch (error) {
+      console.warn('   ⚠️ LLM 검증 실패 (무시하고 진행):', error)
+      return {
+        is_valid: true,
+        confidence_adjustment: 0,
+        issues_found: [],
+        improvements: ['검증 과정에서 오류 발생'],
+      }
+    }
+  }
+
+  // ============================================
+  // 검증 결과 적용
+  // ============================================
+
+  private applyValidation(
+    predictionData: any,
+    confidenceScore: number,
+    validation: ValidationResult
+  ): { predictionData: any; confidenceScore: number } {
+    // 신뢰도 조정
+    let adjustedConfidence = confidenceScore + validation.confidence_adjustment
+    adjustedConfidence = Math.max(0, Math.min(1, adjustedConfidence))
+
+    // 검증 메타데이터 추가
+    const enhancedData = {
+      ...predictionData,
+      validation: {
+        validated: true,
+        is_valid: validation.is_valid,
+        issues_found: validation.issues_found,
+        improvements: validation.improvements,
+        original_confidence: confidenceScore,
+        adjusted_confidence: adjustedConfidence,
+      },
+    }
+
+    // 수정된 순위가 있으면 적용
+    if (validation.revised_ranking && validation.revised_ranking.length > 0) {
+      enhancedData.validation.original_ranking = predictionData.predictions?.map(
+        (p: any) => p.horse_number
+      )
+      // 순위 수정은 경고만 (실제 적용은 신중하게)
+      enhancedData.validation.suggested_ranking = validation.revised_ranking
+    }
+
+    // 수정된 분석이 있으면 추가
+    if (validation.revised_reasoning) {
+      enhancedData.validation.revised_reasoning = validation.revised_reasoning
+    }
+
+    return {
+      predictionData: enhancedData,
+      confidenceScore: adjustedConfidence,
+    }
+  }
+
+  // ============================================
+  // 예측 검증 (기존 - 구조 검증)
 
   async validatePrediction(predictionId: number): Promise<{
     valid: boolean

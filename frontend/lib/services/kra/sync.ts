@@ -289,13 +289,26 @@ export async function syncRaceEntry(
   jockeyId: number,
   trainerId: number
 ): Promise<void> {
-  // 디버깅: KRA API 응답 확인
-  console.log(`📊 Entry 동기화: ${entry.hrName}`, {
-    ordNo: entry.ordNo,
-    wgHr: entry.wgHr,
-    wgBudam: entry.wgBudam,
-    odds: entry.odds,
-    ord: entry.ord,
+  // KRA API는 snake_case로 반환할 수 있으므로 양쪽 모두 체크
+  const entryAny = entry as any
+
+  // 필드 추출 (camelCase 또는 snake_case)
+  const ordNo = entry.ordNo ?? entryAny.ord_no ?? entryAny.hrNo ?? entryAny.hr_no
+  const wgHr = entry.wgHr ?? entryAny.wg_hr
+  const wgBudam = entry.wgBudam ?? entryAny.wg_budam
+  const odds = entry.odds ?? entryAny.win_odds ?? entryAny.winOdds
+  const ord = entry.ord ?? entryAny.rank ?? entryAny.finish_position
+  const rcTime = entry.rcTime ?? entryAny.rc_time ?? entryAny.finish_time
+
+  // 디버깅: KRA API 원본 응답 확인
+  console.log(`📊 Entry 동기화: ${entry.hrName || entryAny.hr_name}`, {
+    ordNo,
+    wgHr,
+    wgBudam,
+    odds,
+    ord,
+    // 원본 필드 확인용
+    rawKeys: Object.keys(entryAny).slice(0, 15),
   })
 
   await prisma.raceEntry.upsert({
@@ -308,24 +321,24 @@ export async function syncRaceEntry(
     update: {
       jockeyId,
       trainerId,
-      gateNumber: entry.ordNo ? parseInt(String(entry.ordNo)) : 1,
-      horseWeightKg: entry.wgHr ? entry.wgHr.toString() : null,
-      jockeyWeightKg: entry.wgBudam ? entry.wgBudam.toString() : null,
-      odds: entry.odds ? entry.odds.toString() : null,
-      finishPosition: entry.ord || null,
-      finishTime: entry.rcTime ? parseFloat(entry.rcTime) : null,
+      gateNumber: ordNo ? parseInt(String(ordNo)) : 1,
+      horseWeightKg: wgHr ? wgHr.toString() : null,
+      jockeyWeightKg: wgBudam ? wgBudam.toString() : null,
+      odds: odds ? odds.toString() : null,
+      finishPosition: ord || null,
+      finishTime: rcTime ? parseFloat(rcTime) : null,
     },
     create: {
       raceId,
       horseId,
       jockeyId,
       trainerId,
-      gateNumber: entry.ordNo ? parseInt(String(entry.ordNo)) : 1,
-      horseWeightKg: entry.wgHr ? entry.wgHr.toString() : null,
-      jockeyWeightKg: entry.wgBudam ? entry.wgBudam.toString() : null,
-      odds: entry.odds ? entry.odds.toString() : null,
-      finishPosition: entry.ord || null,
-      finishTime: entry.rcTime ? parseFloat(entry.rcTime) : null,
+      gateNumber: ordNo ? parseInt(String(ordNo)) : 1,
+      horseWeightKg: wgHr ? wgHr.toString() : null,
+      jockeyWeightKg: wgBudam ? wgBudam.toString() : null,
+      odds: odds ? odds.toString() : null,
+      finishPosition: ord || null,
+      finishTime: rcTime ? parseFloat(rcTime) : null,
     },
   })
 }
