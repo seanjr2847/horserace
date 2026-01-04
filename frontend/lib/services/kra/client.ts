@@ -533,31 +533,34 @@ export class KRAApiClient {
 
   /**
    * KRA API 날짜 파싱 (YYYYMMDD → Date)
+   * UTC 자정으로 반환 (Prisma Date 필드와 일치)
    */
   private parseKRADate(dateStr: string): Date {
     const year = parseInt(dateStr.substring(0, 4))
     const month = parseInt(dateStr.substring(4, 6)) - 1
     const day = parseInt(dateStr.substring(6, 8))
-    return new Date(year, month, day)
+    return new Date(Date.UTC(year, month, day))
   }
 
   /**
    * KRA API 날짜 파싱 (YYYYMMDD → Date) - static 버전
+   * UTC 자정으로 반환 (Prisma Date 필드와 일치)
    */
   static parseDate(dateStr: string): Date {
     const year = parseInt(dateStr.substring(0, 4))
     const month = parseInt(dateStr.substring(4, 6)) - 1
     const day = parseInt(dateStr.substring(6, 8))
-    return new Date(year, month, day)
+    return new Date(Date.UTC(year, month, day))
   }
 
   /**
    * 날짜를 KRA API 형식으로 변환 (Date → YYYYMMDD)
+   * UTC 기준으로 변환
    */
   static formatDate(date: Date): string {
-    const year = date.getFullYear()
-    const month = String(date.getMonth() + 1).padStart(2, '0')
-    const day = String(date.getDate()).padStart(2, '0')
+    const year = date.getUTCFullYear()
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0')
+    const day = String(date.getUTCDate()).padStart(2, '0')
     return `${year}${month}${day}`
   }
 

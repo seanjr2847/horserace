@@ -16,20 +16,20 @@ import { syncRacesByDate, syncAllOddsForDate } from '@/lib/services/kra/sync'
 let isSyncing = false
 let lastSyncDate: string | null = null
 
-// 한국 시간 기준 오늘 날짜 구하기 (자정)
+// 한국 시간 기준 오늘 날짜 구하기 (UTC 자정으로 표현)
 function getKoreanToday(): Date {
   // 현재 UTC 시간에서 한국 시간(+9) 기준 날짜 계산
   const now = new Date()
-  const koreaOffset = 9 * 60 // 분 단위
-  const koreaTime = new Date(now.getTime() + koreaOffset * 60 * 1000)
+  const koreaOffset = 9 * 60 * 60 * 1000 // 밀리초 단위 (9시간)
+  const koreaTime = new Date(now.getTime() + koreaOffset)
 
-  // 한국 날짜의 자정을 UTC로 표현
+  // 한국 날짜의 자정을 UTC 자정으로 표현 (Prisma Date 필드와 일치)
   const year = koreaTime.getUTCFullYear()
   const month = koreaTime.getUTCMonth()
   const day = koreaTime.getUTCDate()
 
-  // 로컬 타임존의 자정으로 생성 (Prisma가 저장하는 방식과 일치)
-  return new Date(year, month, day)
+  // UTC 자정으로 생성 (YYYY-MM-DDT00:00:00.000Z)
+  return new Date(Date.UTC(year, month, day))
 }
 
 export async function GET(request: NextRequest) {
