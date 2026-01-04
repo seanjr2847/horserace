@@ -47,10 +47,10 @@ export default function PredictionsPage() {
     }
   }
 
-  // 경주장별로 그룹화
+  // 경주장별로 그룹화 (API는 track.id로 반환)
   const racesByTrack = TRACKS.map((track) => ({
     ...track,
-    races: todayRaces.filter((r) => r.trackId === track.id),
+    races: todayRaces.filter((r) => (r.track?.id ?? r.trackId) === track.id),
   }))
 
   // 현재 탭에 따른 경주 필터링
