@@ -56,8 +56,12 @@ export default function RaceDetailPage() {
       // 예측 생성 성공 - 데이터 새로고침
       await loadRaceDetail()
       alert('예측이 생성되었습니다!')
-    } catch (err) {
-      alert(err instanceof Error ? err.message : '예측 생성 중 오류가 발생했습니다')
+    } catch (err: any) {
+      // API 에러 상세 표시
+      const errorMsg = err?.response?.data?.message || err?.message || '예측 생성 중 오류가 발생했습니다'
+      const errorDetails = err?.response?.data?.errors?.join('\n') || ''
+      alert(`${errorMsg}${errorDetails ? '\n\n상세: ' + errorDetails : ''}`)
+      console.error('Prediction Error:', err?.response?.data || err)
     } finally {
       setGenerating(false)
     }

@@ -287,28 +287,42 @@ export async function syncRaceEntry(
   entry: KRAHorseEntry,
   horseId: number,
   jockeyId: number,
-  trainerId: number
+  trainerId: number,
+  entryIndex: number // 순서 기반 게이트 번호 폴백용
 ): Promise<void> {
   // KRA API는 snake_case로 반환할 수 있으므로 양쪽 모두 체크
   const entryAny = entry as any
 
-  // 필드 추출 (camelCase 또는 snake_case)
-  const ordNo = entry.ordNo ?? entryAny.ord_no ?? entryAny.hrNo ?? entryAny.hr_no
-  const wgHr = entry.wgHr ?? entryAny.wg_hr
-  const wgBudam = entry.wgBudam ?? entryAny.wg_budam
-  const odds = entry.odds ?? entryAny.win_odds ?? entryAny.winOdds
-  const ord = entry.ord ?? entryAny.rank ?? entryAny.finish_position
-  const rcTime = entry.rcTime ?? entryAny.rc_time ?? entryAny.finish_time
+  // 게이트 번호 추출 (hrNo가 마번 = 게이트 번호)
+  // KRA API에서 hrNo는 "마번"으로, 실제 게이트(출발 위치) 번호를 의미
+  const hrNo = entry.hrNo ?? entryAny.hr_no ?? entryAny.hrNo
+  const ordNo = entry.ordNo ?? entryAny.ord_no
+
+  // 게이트 번호: ordNo > hrNo > 순서 기반 폴백
+  let gateNumber = 1
+  if (ordNo && !isNaN(parseInt(String(ordNo)))) {
+    gateNumber = parseInt(String(ordNo))
+  } else if (hrNo && !isNaN(parseInt(String(hrNo)))) {
+    gateNumber = parseInt(String(hrNo))
+  } else {
+    // 최후의 폴백: 배열 순서 기반 (1부터 시작)
+    gateNumber = entryIndex + 1
+  }
+
+  const wgHr = entry.wgHr ?? entryAny.wg_hr ?? entryAny.wgHr
+  const wgBudam = entry.wgBudam ?? entryAny.wg_budam ?? entryAny.wgBudam
+  const odds = entry.odds ?? entryAny.win_odds ?? entryAny.winOdds ?? entryAny.odds
+  const ord = entry.ord ?? entryAny.rank ?? entryAny.finish_position ?? entryAny.ord
+  const rcTime = entry.rcTime ?? entryAny.rc_time ?? entryAny.finish_time ?? entryAny.rcTime
 
   // 디버깅: KRA API 원본 응답 확인
-  console.log(`📊 Entry 동기화: ${entry.hrName || entryAny.hr_name}`, {
+  console.log(`📊 Entry 동기화: ${entry.hrName || entryAny.hr_name || entryAny.hrName}`, {
+    hrNo,
     ordNo,
+    gateNumber,
     wgHr,
-    wgBudam,
     odds,
-    ord,
-    // 원본 필드 확인용
-    rawKeys: Object.keys(entryAny).slice(0, 15),
+    rawKeys: Object.keys(entryAny).slice(0, 20),
   })
 
   await prisma.raceEntry.upsert({
@@ -321,7 +335,7 @@ export async function syncRaceEntry(
     update: {
       jockeyId,
       trainerId,
-      gateNumber: ordNo ? parseInt(String(ordNo)) : 1,
+      gateNumber,
       horseWeightKg: wgHr ? wgHr.toString() : null,
       jockeyWeightKg: wgBudam ? wgBudam.toString() : null,
       odds: odds ? odds.toString() : null,
@@ -333,7 +347,7 @@ export async function syncRaceEntry(
       horseId,
       jockeyId,
       trainerId,
-      gateNumber: ordNo ? parseInt(String(ordNo)) : 1,
+      gateNumber,
       horseWeightKg: wgHr ? wgHr.toString() : null,
       jockeyWeightKg: wgBudam ? wgBudam.toString() : null,
       odds: odds ? odds.toString() : null,
@@ -422,7 +436,8 @@ export async function syncRacesByDate(date: Date): Promise<SyncResult> {
         const entries = entriesByRace.get(raceKey) || []
         console.log(`   - 경주 ${raceInfo.rcNo}: 출전마 ${entries.length}마`)
 
-        for (const entry of entries) {
+        for (let entryIndex = 0; entryIndex < entries.length; entryIndex++) {
+          const entry = entries[entryIndex]
           try {
             // 5. 말 정보 동기화
             const horseId = await syncHorse(entry)
@@ -436,8 +451,8 @@ export async function syncRacesByDate(date: Date): Promise<SyncResult> {
             const trainerId = await syncTrainer(entry.trNo, entry.trName)
             result.stats.trainersCreated++
 
-            // 8. 출전 정보 동기화
-            await syncRaceEntry(raceId, entry, horseId, jockeyId, trainerId)
+            // 8. 출전 정보 동기화 (entryIndex를 폴백용 게이트 번호로 전달)
+            await syncRaceEntry(raceId, entry, horseId, jockeyId, trainerId, entryIndex)
             result.stats.entriesCreated++
           } catch (error) {
             console.error(`     ⚠️ 출전마 ${entry.hrName} 동기화 실패:`, error)
