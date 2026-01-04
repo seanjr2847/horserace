@@ -421,7 +421,7 @@ export default function PredictionCard({ prediction }: PredictionCardProps) {
         {(raceAnalysis || prediction.llmReasoning) && (
           <div className="mt-4 pt-4 border-t border-gray-200">
             <h4 className="text-sm font-medium text-gray-700 mb-2">🤖 AI 분석</h4>
-            <p className="text-sm text-gray-600 whitespace-pre-line line-clamp-4">
+            <p className="text-sm text-gray-600 whitespace-pre-line">
               {raceAnalysis || prediction.llmReasoning}
             </p>
           </div>
