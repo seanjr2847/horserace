@@ -14,17 +14,24 @@ import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorAlert from '@/components/ErrorAlert'
 import type { Race } from '@/types/race'
 
+// 경주장 정보
+const TRACKS = [
+  { id: 1, name: '서울', color: 'blue' },
+  { id: 2, name: '부산경남', color: 'green' },
+  { id: 3, name: '제주', color: 'orange' },
+]
+
 export default function PredictionsPage() {
   const router = useRouter()
 
   const [todayRaces, setTodayRaces] = useState<Race[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [selectedTrack, setSelectedTrack] = useState<string>('')
+  const [activeTab, setActiveTab] = useState<number | null>(null) // null = 전체
 
   useEffect(() => {
     loadTodayRaces()
-  }, [selectedTrack])
+  }, [])
 
   const loadTodayRaces = async () => {
     try {
@@ -32,13 +39,7 @@ export default function PredictionsPage() {
       setError(null)
 
       const races = await racesApi.getTodayRaces()
-
-      // Filter by track if selected
-      const filteredRaces = selectedTrack
-        ? races.filter(r => r.trackId === parseInt(selectedTrack))
-        : races
-
-      setTodayRaces(filteredRaces)
+      setTodayRaces(races)
     } catch (err) {
       setError(err instanceof Error ? err.message : '오류가 발생했습니다')
     } finally {
@@ -46,9 +47,16 @@ export default function PredictionsPage() {
     }
   }
 
-  // TODO: Fetch predictions separately for each race
-  const racesWithPredictions: any[] = []
-  const racesWithoutPredictions = todayRaces
+  // 경주장별로 그룹화
+  const racesByTrack = TRACKS.map((track) => ({
+    ...track,
+    races: todayRaces.filter((r) => r.trackId === track.id),
+  }))
+
+  // 현재 탭에 따른 경주 필터링
+  const displayedTracks = activeTab
+    ? racesByTrack.filter((t) => t.id === activeTab)
+    : racesByTrack
 
   if (loading) {
     return (
@@ -76,27 +84,36 @@ export default function PredictionsPage() {
         </p>
       </div>
 
-      {/* 필터 */}
-      <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-        <div className="flex items-center gap-4">
-          <label className="text-sm font-medium text-gray-700">경마장 선택</label>
-          <select
-            value={selectedTrack}
-            onChange={(e) => setSelectedTrack(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+      {/* 경주장 탭 */}
+      <div className="bg-white rounded-lg shadow-md p-4 mb-6">
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setActiveTab(null)}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              activeTab === null
+                ? 'bg-gray-900 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
           >
-            <option value="">전체</option>
-            <option value="1">서울</option>
-            <option value="2">부산경남</option>
-            <option value="3">제주</option>
-          </select>
-          <div className="ml-auto">
-            <p className="text-sm text-gray-600">
-              오늘 총 <span className="font-bold text-blue-600">{todayRaces.length}</span>개 경주
-              / 예측 완료{' '}
-              <span className="font-bold text-green-600">{racesWithPredictions.length}</span>개
-            </p>
-          </div>
+            전체 ({todayRaces.length})
+          </button>
+          {racesByTrack.map((track) => (
+            <button
+              key={track.id}
+              onClick={() => setActiveTab(track.id)}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                activeTab === track.id
+                  ? track.color === 'blue'
+                    ? 'bg-blue-600 text-white'
+                    : track.color === 'green'
+                    ? 'bg-green-600 text-white'
+                    : 'bg-orange-500 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              {track.name} ({track.races.length})
+            </button>
+          ))}
         </div>
       </div>
 
@@ -105,76 +122,105 @@ export default function PredictionsPage() {
           <p className="text-gray-500 text-lg">오늘 예정된 경주가 없습니다</p>
         </div>
       ) : (
-        <>
-          {/* 예측 완료된 경주 */}
-          {racesWithPredictions.length > 0 && (
-            <div className="mb-8">
-              <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
-                <span className="w-2 h-8 bg-green-500 rounded"></span>
-                예측 완료된 경주
-              </h2>
-              <div className="grid grid-cols-1 gap-6">
-                {racesWithPredictions.map((race) => (
-                  <div key={race.id} className="bg-white rounded-lg shadow-md p-6">
-                    {/* 경주 정보 */}
-                    <div
-                      className="mb-4 cursor-pointer hover:bg-gray-50 p-4 rounded-lg transition-colors"
-                      onClick={() => router.push(`/races/${race.id}`)}
-                    >
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <h3 className="text-xl font-bold mb-2">
-                            {race.track.name} {race.raceNumber}R
+        <div className="space-y-8">
+          {displayedTracks.map((track) => {
+            if (track.races.length === 0) return null
+
+            const colorClass =
+              track.color === 'blue'
+                ? 'bg-blue-500'
+                : track.color === 'green'
+                ? 'bg-green-500'
+                : 'bg-orange-500'
+
+            const borderColorClass =
+              track.color === 'blue'
+                ? 'border-blue-200'
+                : track.color === 'green'
+                ? 'border-green-200'
+                : 'border-orange-200'
+
+            const bgColorClass =
+              track.color === 'blue'
+                ? 'bg-blue-50'
+                : track.color === 'green'
+                ? 'bg-green-50'
+                : 'bg-orange-50'
+
+            return (
+              <div key={track.id}>
+                {/* 경주장 헤더 */}
+                <div className={`flex items-center gap-3 mb-4 p-3 rounded-lg ${bgColorClass} border ${borderColorClass}`}>
+                  <span className={`w-2 h-8 rounded ${colorClass}`}></span>
+                  <h2 className="text-xl font-bold text-gray-900">
+                    {track.name}
+                  </h2>
+                  <span className="text-gray-600">
+                    {track.races.length}개 경주
+                  </span>
+                </div>
+
+                {/* 경주 카드 그리드 */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                  {track.races
+                    .sort((a, b) => a.raceNumber - b.raceNumber)
+                    .map((race) => (
+                      <div
+                        key={race.id}
+                        onClick={() => router.push(`/races/${race.id}`)}
+                        className="bg-white rounded-lg shadow-md p-4 cursor-pointer hover:shadow-lg transition-shadow border-l-4"
+                        style={{
+                          borderLeftColor:
+                            track.color === 'blue'
+                              ? '#3b82f6'
+                              : track.color === 'green'
+                              ? '#22c55e'
+                              : '#f97316',
+                        }}
+                      >
+                        <div className="flex justify-between items-start mb-2">
+                          <h3 className="text-lg font-bold">
+                            {race.raceNumber}R
                           </h3>
-                          <div className="flex gap-4 text-sm text-gray-600">
-                            <span>거리: {race.distance}m</span>
-                            <span>주로: {race.surfaceType}</span>
-                            <span>출전: {race.entryCount}두</span>
+                          {race.hasPredictions ? (
+                            <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full font-medium">
+                              예측완료
+                            </span>
+                          ) : (
+                            <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full font-medium">
+                              대기중
+                            </span>
+                          )}
+                        </div>
+                        <div className="space-y-1 text-sm text-gray-600">
+                          <div className="flex justify-between">
+                            <span>거리</span>
+                            <span className="font-medium">{race.distance}m</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>출전</span>
+                            <span className="font-medium">{race.entryCount}두</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>주로</span>
+                            <span className="font-medium">{race.surfaceType || '모래'}</span>
                           </div>
                         </div>
-                        <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium">
-                          예측 완료
-                        </span>
                       </div>
-                    </div>
-
-                    {/* 예측 카드들 */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {(race as any).predictions?.map((prediction: any) => (
-                        <PredictionCard key={prediction.id} prediction={prediction} />
-                      ))}
-                    </div>
-                  </div>
-                ))}
+                    ))}
+                </div>
               </div>
-            </div>
-          )}
-
-          {/* 예측 대기 중인 경주 */}
-          {racesWithoutPredictions.length > 0 && (
-            <div>
-              <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
-                <span className="w-2 h-8 bg-gray-400 rounded"></span>
-                예측 대기 중인 경주
-              </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {racesWithoutPredictions.map((race) => (
-                  <RaceCard
-                    key={race.id}
-                    race={race}
-                    onClick={() => router.push(`/races/${race.id}`)}
-                  />
-                ))}
-              </div>
-              <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <p className="text-sm text-blue-800">
-                  💡 경주 상세 페이지로 이동하여 AI 예측을 생성할 수 있습니다
-                </p>
-              </div>
-            </div>
-          )}
-        </>
+            )
+          })}
+        </div>
       )}
+
+      {/* 안내 */}
+      <div className="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <p className="text-sm text-blue-800">
+          💡 경주 카드를 클릭하면 상세 정보와 AI 예측을 확인할 수 있습니다
+        </p>
+      </div>
     </div>
   )
 }
