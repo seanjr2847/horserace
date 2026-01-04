@@ -53,10 +53,12 @@ export default function PredictionCard({ prediction }: PredictionCardProps) {
 
   // 예측 데이터 파싱
   const data = prediction.predictionData || {}
-  const predictions = data.predictions || []
-  const raceAnalysis = data.race_analysis || ''
+  // LLM이 'predictions' 또는 'combinations' 또는 'predicted_ranking'으로 출력
+  const predictions = data.predictions || data.combinations || data.predicted_ranking || []
+  const topContenders = data.top_contenders || []
+  const raceAnalysis = data.race_analysis || data.betting_advice || ''
   const bettingAdvice = data.betting_advice || {}
-  const recommendations = data.recommendations || []
+  const recommendations = data.recommendations || {}
   const valueBets = data.value_bets || []
   const avoidBets = data.avoid_bets || []
 
@@ -156,13 +158,17 @@ export default function PredictionCard({ prediction }: PredictionCardProps) {
       <div className="space-y-2">
         <h4 className="text-sm font-medium text-gray-700 mb-2">🎯 추천 조합</h4>
         {predictions.slice(0, 5).map((pred: any, idx: number) => {
-          const horses = pred.horses || pred.horse_names || []
-          const horseNames = Array.isArray(horses)
-            ? horses.map((h: any) => (typeof h === 'string' ? h : h.name || `${h.gate}번`)).join(' → ')
-            : ''
-          const probability = pred.probability || 0
+          // 다양한 LLM 출력 형식 처리
+          const horses = pred.horses || pred.horse_names ||
+            (pred.first && pred.second ? [pred.first, pred.second, pred.third].filter(Boolean) : [])
+          const horseNames = Array.isArray(horses) && horses.length > 0
+            ? horses.map((h: any) => (typeof h === 'string' ? h : h.horse_name || h.name || `${h.gate}번`)).join(' - ')
+            : `${pred.horse_name || ''}`
+          // probability 또는 success_prob
+          const probability = pred.probability || pred.success_prob || 0
           const expectedValue = pred.expected_value
-          const odds = pred.estimated_odds || pred.odds
+          // 다양한 odds 필드명 처리
+          const odds = pred.estimated_odds || pred.odds || pred.trio_odds || pred.trifecta_odds || pred.quinella_odds || pred.exacta_odds || pred.qp_odds
 
           return (
             <div
@@ -253,13 +259,93 @@ export default function PredictionCard({ prediction }: PredictionCardProps) {
 
   // 베팅 추천 렌더링
   const renderBettingRecommendations = () => {
-    if (!recommendations.length && !bettingAdvice.primary_bet) return null
+    // recommendations가 객체인 경우 (primary, value_bet 등)
+    const hasPrimary = recommendations.primary || recommendations.safest
+    const hasValueBet = recommendations.value_bet || recommendations.with_dark_horse
+    const hasAnyRec = hasPrimary || hasValueBet || bettingAdvice.primary_bet
+
+    if (!hasAnyRec) return null
 
     return (
       <div className="mt-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
-        <h4 className="text-sm font-bold text-blue-800 mb-2">💰 베팅 추천</h4>
+        <h4 className="text-sm font-bold text-blue-800 mb-3">💰 베팅 추천</h4>
 
-        {bettingAdvice.primary_bet && (
+        {/* Primary / Safest 추천 */}
+        {hasPrimary && (
+          <div className="mb-3 p-3 bg-white rounded-lg border border-blue-100">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-bold text-blue-700">🎯 메인 추천</span>
+              {(recommendations.primary?.odds || recommendations.safest?.odds) && (
+                <span className="text-lg font-bold text-gray-800">
+                  {(recommendations.primary?.odds || recommendations.safest?.odds).toFixed(1)}배
+                </span>
+              )}
+            </div>
+            <div className="text-base font-medium text-gray-900 mb-1">
+              {recommendations.primary?.display || recommendations.safest?.display}
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-xs mt-2">
+              <div>
+                <span className="text-gray-500">성공확률: </span>
+                <span className="font-semibold">
+                  {((recommendations.primary?.success_prob || recommendations.safest?.success_prob || 0) * 100).toFixed(1)}%
+                </span>
+              </div>
+              <div>
+                <span className="text-gray-500">기댓값: </span>
+                <span className={`font-bold ${getExpectedValueColor(recommendations.primary?.expected_value || recommendations.safest?.expected_value || 0)}`}>
+                  {(recommendations.primary?.expected_value || recommendations.safest?.expected_value) !== undefined
+                    ? `+${((recommendations.primary?.expected_value || recommendations.safest?.expected_value) * 100).toFixed(0)}%`
+                    : '-'}
+                </span>
+              </div>
+            </div>
+            {(recommendations.primary?.reasoning || recommendations.safest?.reasoning) && (
+              <p className="text-xs text-gray-500 mt-2">
+                {recommendations.primary?.reasoning || recommendations.safest?.reasoning}
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Value Bet / Dark Horse 추천 */}
+        {hasValueBet && (
+          <div className="p-3 bg-gradient-to-r from-yellow-50 to-orange-50 rounded-lg border border-yellow-200">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-bold text-orange-700">⭐ 가치베팅 / 고배당</span>
+              {(recommendations.value_bet?.odds || recommendations.with_dark_horse?.odds) && (
+                <span className="text-lg font-bold text-orange-600">
+                  {(recommendations.value_bet?.odds || recommendations.with_dark_horse?.odds).toFixed(1)}배
+                </span>
+              )}
+            </div>
+            <div className="text-base font-medium text-gray-900 mb-1">
+              {recommendations.value_bet?.display || recommendations.with_dark_horse?.display}
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-xs mt-2">
+              <div>
+                <span className="text-gray-500">성공확률: </span>
+                <span className="font-semibold">
+                  {((recommendations.value_bet?.success_prob || recommendations.with_dark_horse?.success_prob || 0) * 100).toFixed(1)}%
+                </span>
+              </div>
+              <div>
+                <span className="text-gray-500">기댓값: </span>
+                <span className={`font-bold ${getExpectedValueColor(recommendations.value_bet?.expected_value || recommendations.with_dark_horse?.expected_value || 0)}`}>
+                  +{((recommendations.value_bet?.expected_value || recommendations.with_dark_horse?.expected_value || 0) * 100).toFixed(0)}%
+                </span>
+              </div>
+            </div>
+            {(recommendations.value_bet?.reasoning || recommendations.with_dark_horse?.reasoning) && (
+              <p className="text-xs text-gray-500 mt-2">
+                {recommendations.value_bet?.reasoning || recommendations.with_dark_horse?.reasoning}
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* 기존 betting_advice (단승 등) */}
+        {bettingAdvice.primary_bet && !hasPrimary && (
           <div className="mb-3">
             <div className="text-sm font-medium text-gray-800">
               🎯 메인: {bettingAdvice.primary_bet}
@@ -269,26 +355,6 @@ export default function PredictionCard({ prediction }: PredictionCardProps) {
                 🔄 보조: {bettingAdvice.backup_bet}
               </div>
             )}
-            {bettingAdvice.backup_bets && bettingAdvice.backup_bets.length > 0 && (
-              <div className="text-xs text-gray-600 mt-1">
-                🔄 보조: {bettingAdvice.backup_bets.join(', ')}
-              </div>
-            )}
-          </div>
-        )}
-
-        {recommendations.length > 0 && (
-          <div className="space-y-2">
-            {recommendations.slice(0, 3).map((rec: any, idx: number) => (
-              <div key={idx} className="flex items-center justify-between text-sm">
-                <span className="text-gray-700">{rec.bet || rec.description}</span>
-                {rec.expected_value !== undefined && (
-                  <span className={getExpectedValueColor(rec.expected_value)}>
-                    EV: {rec.expected_value > 0 ? '+' : ''}{(rec.expected_value * 100).toFixed(1)}%
-                  </span>
-                )}
-              </div>
-            ))}
           </div>
         )}
 
@@ -297,7 +363,7 @@ export default function PredictionCard({ prediction }: PredictionCardProps) {
             <span className="text-xs text-gray-600">리스크: </span>
             <span
               className={`text-xs font-medium ${
-                bettingAdvice.risk_level === '낮음' || bettingAdvice.risk_level === '낮음'
+                bettingAdvice.risk_level === '낮음'
                   ? 'text-green-600'
                   : bettingAdvice.risk_level === '중간'
                   ? 'text-yellow-600'
