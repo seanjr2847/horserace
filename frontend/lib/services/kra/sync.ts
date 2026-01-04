@@ -312,8 +312,22 @@ export async function syncRaceEntry(
   const wgHr = entry.wgHr ?? entryAny.wg_hr ?? entryAny.wgHr
   const wgBudam = entry.wgBudam ?? entryAny.wg_budam ?? entryAny.wgBudam
   const odds = entry.odds ?? entryAny.win_odds ?? entryAny.winOdds ?? entryAny.odds
-  const ord = entry.ord ?? entryAny.rank ?? entryAny.finish_position ?? entryAny.ord
+  const ordRaw = entry.ord ?? entryAny.rank ?? entryAny.finish_position ?? entryAny.ord
   const rcTime = entry.rcTime ?? entryAny.rc_time ?? entryAny.finish_time ?? entryAny.rcTime
+
+  // finishPosition은 숫자만 허용 (문자열 "국5등급" 같은 값은 null로 처리)
+  let finishPosition: number | null = null
+  if (ordRaw !== null && ordRaw !== undefined) {
+    const parsed = parseInt(String(ordRaw), 10)
+    if (!isNaN(parsed) && parsed > 0 && parsed <= 20) {
+      finishPosition = parsed
+    }
+  }
+
+  // gateNumber가 비정상적으로 큰 경우 (50104 등) entryIndex 사용
+  if (gateNumber > 20) {
+    gateNumber = entryIndex + 1
+  }
 
   // 디버깅: KRA API 원본 응답 확인
   console.log(`📊 Entry 동기화: ${entry.hrName || entryAny.hr_name || entryAny.hrName}`, {
@@ -339,8 +353,8 @@ export async function syncRaceEntry(
       horseWeightKg: wgHr ? wgHr.toString() : null,
       jockeyWeightKg: wgBudam ? wgBudam.toString() : null,
       odds: odds ? odds.toString() : null,
-      finishPosition: ord || null,
-      finishTime: rcTime ? parseFloat(rcTime) : null,
+      finishPosition,
+      finishTime: rcTime ? parseFloat(String(rcTime)) : null,
     },
     create: {
       raceId,
@@ -351,8 +365,8 @@ export async function syncRaceEntry(
       horseWeightKg: wgHr ? wgHr.toString() : null,
       jockeyWeightKg: wgBudam ? wgBudam.toString() : null,
       odds: odds ? odds.toString() : null,
-      finishPosition: ord || null,
-      finishTime: rcTime ? parseFloat(rcTime) : null,
+      finishPosition,
+      finishTime: rcTime ? parseFloat(String(rcTime)) : null,
     },
   })
 }
@@ -447,8 +461,14 @@ export async function syncRacesByDate(date: Date): Promise<SyncResult> {
             const jockeyId = await syncJockey(entry.jkNo, entry.jkName)
             result.stats.jockeysCreated++
 
-            // 7. 조교사 정보 동기화
-            const trainerId = await syncTrainer(entry.trNo, entry.trName)
+            // 7. 조교사 정보 동기화 (KRA API에서 상세 정보 가져오기)
+            let trainerDetail = null
+            try {
+              trainerDetail = await kraClient.getTrainerInfo(entry.trNo)
+            } catch (e) {
+              // 조교사 상세 정보 조회 실패시 무시
+            }
+            const trainerId = await syncTrainer(entry.trNo, entry.trName, trainerDetail || undefined)
             result.stats.trainersCreated++
 
             // 8. 출전 정보 동기화 (entryIndex를 폴백용 게이트 번호로 전달)
