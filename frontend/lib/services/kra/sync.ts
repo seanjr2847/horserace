@@ -372,12 +372,33 @@ export async function syncRacesByDate(date: Date): Promise<SyncResult> {
   try {
     console.log(`📅 ${dateStr} 경주 데이터 동기화 시작...`)
 
-    // 1. 해당 날짜의 경주 목록 조회
-    const races = await kraClient.getRacesByDate(dateStr)
-    console.log(`   - 경주 ${races.length}개 발견`)
+    // 1. 모든 경주장(서울/부산경남/제주)에서 경주 목록 조회
+    const meetCodes = ['1', '2', '3'] // 서울, 부산경남, 제주
+    const allRaces: KRARaceInfo[] = []
 
-    // 2. 해당 날짜의 전체 출전마 한 번에 조회 (API 호출 최적화)
-    const allEntries = await kraClient.getEntriesByDate(dateStr)
+    for (const meet of meetCodes) {
+      try {
+        const trackRaces = await kraClient.getRacesByDate(dateStr, meet)
+        console.log(`   - ${meet === '1' ? '서울' : meet === '2' ? '부산경남' : '제주'}: ${trackRaces.length}개 경주`)
+        allRaces.push(...trackRaces)
+      } catch (err) {
+        console.warn(`   - ${meet === '1' ? '서울' : meet === '2' ? '부산경남' : '제주'}: 조회 실패`)
+      }
+    }
+
+    const races = allRaces
+    console.log(`   - 총 경주 ${races.length}개 발견`)
+
+    // 2. 모든 경주장에서 출전마 한 번에 조회 (API 호출 최적화)
+    const allEntries: KRAHorseEntry[] = []
+    for (const meet of meetCodes) {
+      try {
+        const trackEntries = await kraClient.getEntriesByDate(dateStr, meet)
+        allEntries.push(...trackEntries)
+      } catch (err) {
+        console.warn(`   - 출전마 조회 실패: meet=${meet}`)
+      }
+    }
     console.log(`   - 전체 출전마 ${allEntries.length}마 조회됨`)
 
     // meet별로 출전마 그룹화 (meet + rcNo 조합으로 필터링)
@@ -678,8 +699,18 @@ export async function syncAllOddsForDate(date: Date): Promise<number> {
   try {
     console.log(`📊 ${dateStr} 배당률 동기화 시작...`)
 
-    // 해당 날짜의 전체 배당률 조회
-    const allOdds = await kraClient.getAllOddsByDate(dateStr)
+    // 모든 경주장에서 배당률 조회
+    const meetCodes = ['1', '2', '3'] // 서울, 부산경남, 제주
+    const allOdds: any[] = []
+
+    for (const meet of meetCodes) {
+      try {
+        const trackOdds = await kraClient.getAllOddsByDate(dateStr, meet)
+        allOdds.push(...trackOdds)
+      } catch (err) {
+        console.warn(`   - 배당률 조회 실패: meet=${meet}`)
+      }
+    }
 
     if (allOdds.length === 0) {
       console.log(`   - 배당률 데이터 없음`)
